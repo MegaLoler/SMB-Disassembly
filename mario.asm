@@ -2,6 +2,9 @@
 ; mario.nes.original disasembled by DISASM6 v1.5
 ;-------------------------------------------------------------------------------
 
+	; reverse engineered labels
+	.include "labels.i"
+
 ;-------------------------------------------------------------------------------
 ; iNES Header
 ;-------------------------------------------------------------------------------
@@ -29,28 +32,76 @@
 ;-------------------------------------------------------------------------------
 ; reset vector
 ;-------------------------------------------------------------------------------
+	; disable irqs
 reset:      sei                ; $8000: 78        
+	; disable decimal mode
             cld                ; $8001: d8        
+	; load the value $10 into a
             lda #$10           ; $8002: a9 10     
+	; store the value into PPU_CTRL
+	; set background to use 2nd pattern table
             sta $2000          ; $8004: 8d 00 20  
+	; load $ff onto x
             ldx #$ff           ; $8007: a2 ff     
+	; transfer x to the stack pointer register
+	; setting the stack pointer to the top of page $01
             txs                ; $8009: 9a        
-__800a:     lda $2002          ; $800a: ad 02 20  
-            bpl __800a         ; $800d: 10 fb     
-__800f:     lda $2002          ; $800f: ad 02 20  
-            bpl __800f         ; $8012: 10 fb     
+	; read the ppu status reg
+@vblank_wait:
+            lda $2002          ; $800a: ad 02 20  
+	; wait for that value to be positive
+	; the bit indicating vblank is bit 7, the sign bit
+	; 1 = in vblank, therefore NEGATIVE is vblank
+	; and POSITIVE, is NOT vblank
+	; so, while positive, Until vblank, loop
+            bpl @vblank_wait         ; $800d: 10 fb     
+	; reading the ppu status also clears that vblank bit
+	; so its no longer set
+	; now wait for another vblank
+@vblank_wait2:
+            lda $2002          ; $800f: ad 02 20  
+            bpl @vblank_wait2         ; $8012: 10 fb     
+	; my question at the moment: why wait 2 vblanks?
+	; is it waiting for the ppu to stabilize or somethin?
+
+	; load $fe into y
+	; and $05 into x
             ldy #$fe           ; $8014: a0 fe     
             ldx #$05           ; $8016: a2 05     
-__8018:     lda $07d7,x        ; $8018: bd d7 07  
+	; read value at this address, offset by 5
+	; which is in ram? near the top
+	; skip, if its greater than $0a ?
+@loop:      lda addr01,x        ; $8018: bd d7 07  
             cmp #$0a           ; $801b: c9 0a     
-            bcs __802b         ; $801d: b0 0c     
+            bcs @skip          ; $801d: b0 0c     
+
+	; otherwise, dec x
+	; and loop for those 5 times!
             dex                ; $801f: ca        
-            bpl __8018         ; $8020: 10 f6     
-            lda $07ff          ; $8022: ad ff 07  
+            bpl @loop          ; $8020: 10 f6     
+	; so basically, checks to see if any of those values
+	; are greater than 10, and if so, skips this next bit
+
+	; also check this very last byte in ram
+	; and also skip unless its $a5
+            lda addr02          ; $8022: ad ff 07  
             cmp #$a5           ; $8025: c9 a5     
-            bne __802b         ; $8027: d0 02     
+            bne @skip          ; $8027: d0 02     
+
+	; and so in the end,
+	; Y is loaded with $fe
+	; UNLESS!
+	; last byte of ram is $a5
+	; and none of those 5 bytes from before
+	; are greater than 10
+
+	; so my guess, for now, is that y = $d6 ,
+	; indicates some kind of reset?
             ldy #$d6           ; $8029: a0 d6     
-__802b:     jsr __90cc         ; $802b: 20 cc 90  
+
+; skip here if that value was greater than 10 / $a
+; or if last byte of ram isnt $a5
+@skip:      jsr __90cc         ; $802b: 20 cc 90  
             sta $4011          ; $802e: 8d 11 40  
             sta $0770          ; $8031: 8d 70 07  
             lda #$a5           ; $8034: a9 a5     
