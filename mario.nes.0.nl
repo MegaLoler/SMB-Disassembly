@@ -1,3 +1,4 @@
+$8057#@halt#
 $8E3B#@loop#
 $90D2#@loop1#
 $90D4#@loop2#
@@ -5,11 +6,7 @@ $90DC#@skip#
 $90DE#@skip2#
 $800A#@vblank_wait#
 $800F#@vblank_wait2#
-$8057#__8057#
-$805A#__805a#
-$806D#__806d#
 $8080#__8080#
-$809E#__809e#
 $80A9#__80a9#
 $80D0#__80d0#
 $8100#__8100#
@@ -227,13 +224,11 @@ $8E5C#__8e5c#
 $8E6A#__8e6a#
 $8E6C#__8e6c#
 $8E8D#__8e8d#
-$8E92#__8e92#
 $8EA9#__8ea9#
 $8EB3#__8eb3#
 $8EB6#__8eb6#
 $8EB9#__8eb9#
 $8EBB#__8ebb#
-$8EDD#__8edd#
 $8EF4#__8ef4#
 $8EF5#__8ef5#
 $8F00#__8f00#
@@ -880,3 +875,7 @@ $8082#nmi#
 $8000#reset#
 $8EE6#reset_scroll#
 $8EED#set_ppu_ctrl#
+$8EDD#subroutine04#
+$8E92#subroutine05#
+$805A#table01#
+$806D#table02#

@@ -131,6 +131,7 @@ reset:      sei                ; $8000: 78
             jsr hide_all_sprites         ; $8046: 20 20 82  
             jsr init_bg        ; $8049: 20 19 8e  
 	; inc this var
+	; so what could it be? reset counter?
             inc addr10          ; $804c: ee 74 07  
 	; and load the ppu_ctrl_mirror ?
             lda ppu_ctrl_mirror; $804f: ad 78 07  
@@ -142,57 +143,101 @@ reset:      sei                ; $8000: 78
 @halt:      jmp @halt          ; $8057: 4c 57 80  
 
 ;-------------------------------------------------------------------------------
-__805a:     ora ($a4,x)        ; $805a: 01 a4     
-            iny                ; $805c: c8        
-            .hex ec 10 00      ; $805d: ec 10 00  Bad Addr Mode - CPX $0010
-            eor ($41,x)        ; $8060: 41 41     
-            jmp $3c34          ; $8062: 4c 34 3c  
+; this is some sort of table thats looked up
+; well, it looks like two tables
+; and they are lookup up in parallel
+; table01 i think is the low byte
+; and table02 i think is the high byte
+table01:
+            .hex 01 a4 c8 ec 10 00 41 41 4c 34 3c 44 54 68 7c a8 bf de ef
+table02:
+            .hex 03 8c 8c 8c 8d 03 03 03 8d 8d 8d 8d 8d 8d 8d 8d 8d 8d 8d
 
-;-------------------------------------------------------------------------------
-            .hex 44 54         ; $8065: 44 54     Invalid Opcode - NOP $54
-            pla                ; $8067: 68        
-            .hex 7c a8 bf      ; $8068: 7c a8 bf  Invalid Opcode - NOP __bfa8,x
-            .hex de ef         ; $806b: de ef     Suspected data
-__806d:     .hex 03 8c         ; $806d: 03 8c     Invalid Opcode - SLO ($8c,x)
-            sty __8d8c         ; $806f: 8c 8c 8d  
-            .hex 03 03         ; $8072: 03 03     Invalid Opcode - SLO ($03,x)
-            .hex 03 8d         ; $8074: 03 8d     Invalid Opcode - SLO ($8d,x)
-            sta __8d8d         ; $8076: 8d 8d 8d  
-            sta __8d8d         ; $8079: 8d 8d 8d  
-            sta __8d8d         ; $807c: 8d 8d 8d  
-            .hex 8d            ; $807f: 8d        Suspected data
+; hey look, its 8080, that must be some standard location for audio?? :thinking:
+; jsut a guess, because i saw it when looking at nsfs
+; so this must be where to jump to to trigger audio routine?
+; unsure /exactly/
 __8080:     brk                ; $8080: 00        
             rti                ; $8081: 40        
 
 ;-------------------------------------------------------------------------------
 ; nmi vector
 ;-------------------------------------------------------------------------------
-nmi:        lda $0778          ; $8082: ad 78 07  
+	; here is nmi, aka vblank
+	; first things first, disable nmi!
+	; saving the previous value in order to restore it later
+nmi:        lda ppu_ctrl_mirror; $8082: ad 78 07  
             and #$7f           ; $8085: 29 7f     
-            sta $0778          ; $8087: 8d 78 07  
+            sta ppu_ctrl_mirror; $8087: 8d 78 07  
+	; but we're also forcing base nametable to be 0
+	; but restoring to whatever it was previously
             and #$7e           ; $808a: 29 7e     
-            sta $2000          ; $808c: 8d 00 20  
-            lda $0779          ; $808f: ad 79 07  
+            sta ppu_ctrl       ; $808c: 8d 00 20  
+
+	; no grab whatever this var is
+	; its ppu mask mirror!
+	; mask it
+	; so in THIS case, disabling showing things!
+            lda ppu_mask_mirror; $808f: ad 79 07  
             and #$e6           ; $8092: 29 e6     
-            ldy $0774          ; $8094: ac 74 07  
-            bne __809e         ; $8097: d0 05     
-            lda $0779          ; $8099: ad 79 07  
+            ldy addr10         ; $8094: ac 74 07  
+	; and i'm guessing, store the mask unless a counter overflow of some kind?
+	; idk
+            bne @skip          ; $8097: d0 05     
+	; and in the SECOND case, enabling showing things!!!
+	; so ittl only show things if addr10 is 0
+	; which, on reset, it increments it, so unliss its overflowing
+	; it makes things invisible on reset
+	; and otherwise, instead of masking (disabling) bits,
+	; we're uh, enabling bits
+            lda ppu_mask_mirror; $8099: ad 79 07  
             ora #$1e           ; $809c: 09 1e     
-__809e:     sta $0779          ; $809e: 8d 79 07  
+@skip:      sta ppu_mask_mirror; $809e: 8d 79 07  
+	; then masking it and setting the ppu mask with it! 
+	; so thats what this is!
             and #$e7           ; $80a1: 29 e7     
-            sta $2001          ; $80a3: 8d 01 20  
-            ldx $2002          ; $80a6: ae 02 20  
+            sta ppu_mask       ; $80a3: 8d 01 20  
+
+	; grab the ppu status
+            ldx  ppu_status    ; $80a6: ae 02 20  
+	; huh, thats interesting, using
+	; the ppu status as an offset??
+	; anyway, reset the scrolling
 __80a9:     lda #$00           ; $80a9: a9 00     
             jsr reset_scroll   ; $80ab: 20 e6 8e  
-            sta $2003          ; $80ae: 8d 03 20  
+	; and here setting the oamdma page to zero page
+	; so does that mean the attribute memory copy is stored in zero page?
+	; oh! no thats wrong, i get it
+	; oam addr is an offset? i think?
+	; and the NEXT value written to 4014h is the page
+            sta oam_addr       ; $80ae: 8d 03 20  
+	; so yeah, this is the page
+	; meaning oam is stored Here instead
             lda #$02           ; $80b1: a9 02     
-            sta $4014          ; $80b3: 8d 14 40  
-            ldx $0773          ; $80b6: ae 73 07  
-            lda __805a,x       ; $80b9: bd 5a 80  
-            sta $00            ; $80bc: 85 00     
-            lda __806d,x       ; $80be: bd 6d 80  
-            sta $01            ; $80c1: 85 01     
-            jsr __8edd         ; $80c3: 20 dd 8e  
+            sta oam_dma        ; $80b3: 8d 14 40  
+	; so that initiates a dma
+	; basically updating all the sprites
+	; according to the sprite data in ram at page $02
+
+	; now here we are loading some var
+	; and using it as an offset for some data to store at 
+	; the first two bytes of ram 
+	; not sure what it is
+	; but it seems to affect color pallets and the 
+	; bits of the map that get loaded in the world when scrolling
+	; so basically, according to some variable
+	; get the according two bits of data from these tables
+	; and store them at zp 00 and 01
+	; these bits of data are a 16 bit address
+	; that point to an array, i think
+            ldx addr12         ; $80b6: ae 73 07  
+            lda table01,x      ; $80b9: bd 5a 80  
+            sta zp03           ; $80bc: 85 00     
+            lda table02,x      ; $80be: bd 6d 80  
+            sta zp04           ; $80c1: 85 01     
+	; then call this subroutine
+            jsr subroutine04   ; $80c3: 20 dd 8e  
+
             ldy #$00           ; $80c6: a0 00     
             ldx $0773          ; $80c8: ae 73 07  
             cpx #$06           ; $80cb: e0 06     
@@ -2085,7 +2130,8 @@ __8e8d:     pla                ; $8e8d: 68
             rts                ; $8e91: 60        
 
 ;-------------------------------------------------------------------------------
-__8e92:     sta $2006          ; $8e92: 8d 06 20  
+subroutine05:
+            sta $2006          ; $8e92: 8d 06 20  
             iny                ; $8e95: c8        
             lda ($00),y        ; $8e96: b1 00     
             sta $2006          ; $8e98: 8d 06 20  
@@ -2125,10 +2171,19 @@ __8ebb:     sta $2007          ; $8ebb: 8d 07 20
             sta $2006          ; $8ed4: 8d 06 20  
             sta $2006          ; $8ed7: 8d 06 20  
             sta $2006          ; $8eda: 8d 06 20  
-__8edd:     ldx $2002          ; $8edd: ae 02 20  
+
+; grab ppu status on x
+; and so the tables near the beginning store
+; an address
+; which points to an array
+; and here we're grabbing the first element of that array
+; and if its 0, we just reset scroll and return
+; and if its >1, we branch to a different part
+subroutine04:
+            ldx ppu_status     ; $8edd: ae 02 20  
             ldy #$00           ; $8ee0: a0 00     
             lda ($00),y        ; $8ee2: b1 00     
-            bne __8e92         ; $8ee4: d0 ac     
+            bne subroutine05         ; $8ee4: d0 ac     
 
 ; short sub routine
 ; takes A as argument
