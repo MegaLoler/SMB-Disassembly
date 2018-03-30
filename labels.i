@@ -21,6 +21,7 @@ addr01 = $07d7
 reset_switch = $07ff
 addr02 = $07a7
 addr03 = $0770
+addr10 = $0774
 ppu_ctrl_mirror = $0778
 
 addr04 = $04a0

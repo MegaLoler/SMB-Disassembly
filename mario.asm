@@ -130,11 +130,16 @@ reset:      sei                ; $8000: 78
 	; and resetting the scrolling (as a part of the latter)
             jsr hide_all_sprites         ; $8046: 20 20 82  
             jsr init_bg        ; $8049: 20 19 8e  
-            inc $0774          ; $804c: ee 74 07  
-            lda $0778          ; $804f: ad 78 07  
+	; inc this var
+            inc addr10          ; $804c: ee 74 07  
+	; and load the ppu_ctrl_mirror ?
+            lda ppu_ctrl_mirror; $804f: ad 78 07  
+	; oh yes, that way we can keep settings but enable nmi!!!
             ora #$80           ; $8052: 09 80     
             jsr set_ppu_ctrl   ; $8054: 20 ed 8e  
-__8057:     jmp __8057         ; $8057: 4c 57 80  
+
+	; and after that.... we halt forever, thats the end of the reset routine!!!
+@halt:      jmp @halt          ; $8057: 4c 57 80  
 
 ;-------------------------------------------------------------------------------
 __805a:     ora ($a4,x)        ; $805a: 01 a4     
