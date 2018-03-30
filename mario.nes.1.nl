@@ -1190,3 +1190,4 @@ $FFA2#__ffa2#
 $FFC9#__ffc9#
 $FFEA#__ffea#
 $FFF0#irq#
+$FFFA#vectors#

@@ -84,7 +84,7 @@ reset:      sei                ; $8000: 78
 
 	; also check this very last byte in ram
 	; and also skip unless its $a5
-            lda addr02          ; $8022: ad ff 07  
+            lda reset_switch   ; $8022: ad ff 07  
             cmp #$a5           ; $8025: c9 a5     
             bne @skip          ; $8027: d0 02     
 
@@ -101,22 +101,39 @@ reset:      sei                ; $8000: 78
 
 ; skip here if that value was greater than 10 / $a
 ; or if last byte of ram isnt $a5
-@skip:      jsr __90cc         ; $802b: 20 cc 90  
-            sta $4011          ; $802e: 8d 11 40  
-            sta $0770          ; $8031: 8d 70 07  
+; do this sub routine
+; so y = either $d6 or $fe
+; and is an argument to this subroutine
+@skip:      jsr init_ram       ; $802b: 20 cc 90  
+	; after init_ram, a = 0, i beleive
+	; so this clears the dmc_raw,
+	; i beleive that means it mutes it?
+            sta dmc_raw        ; $802e: 8d 11 40  
+	; here's a var in ram being cleared
+            sta addr03         ; $8031: 8d 70 07  
+	; and here the last byte in ram is being set to this!
+	; which is what enables the reset code
+	; to distinguish power on from reset, i beleive
             lda #$a5           ; $8034: a9 a5     
-            sta $07ff          ; $8036: 8d ff 07  
-            sta $07a7          ; $8039: 8d a7 07  
+            sta reset_switch   ; $8036: 8d ff 07  
+	; so is this var being set to that value
+            sta addr02         ; $8039: 8d a7 07  
+	; disable dmc, enable all other channels
             lda #$0f           ; $803c: a9 0f     
-            sta $4015          ; $803e: 8d 15 40  
+            sta apu_status     ; $803e: 8d 15 40  
+	; enable show sprites and bg in leftmost pixels of screen
             lda #$06           ; $8041: a9 06     
-            sta $2001          ; $8043: 8d 01 20  
-            jsr __8220         ; $8046: 20 20 82  
-            jsr __8e19         ; $8049: 20 19 8e  
+            sta ppu_mask       ; $8043: 8d 01 20  
+	; call these two sub routines
+	; hiding all sprites on the screen
+	; and clearing the background
+	; and resetting the scrolling (as a part of the latter)
+            jsr hide_all_sprites         ; $8046: 20 20 82  
+            jsr init_bg        ; $8049: 20 19 8e  
             inc $0774          ; $804c: ee 74 07  
             lda $0778          ; $804f: ad 78 07  
             ora #$80           ; $8052: 09 80     
-            jsr __8eed         ; $8054: 20 ed 8e  
+            jsr set_ppu_ctrl   ; $8054: 20 ed 8e  
 __8057:     jmp __8057         ; $8057: 4c 57 80  
 
 ;-------------------------------------------------------------------------------
@@ -161,7 +178,7 @@ __809e:     sta $0779          ; $809e: 8d 79 07
             sta $2001          ; $80a3: 8d 01 20  
             ldx $2002          ; $80a6: ae 02 20  
 __80a9:     lda #$00           ; $80a9: a9 00     
-            jsr __8ee6         ; $80ab: 20 e6 8e  
+            jsr reset_scroll   ; $80ab: 20 e6 8e  
             sta $2003          ; $80ae: 8d 03 20  
             lda #$02           ; $80b1: a9 02     
             sta $4014          ; $80b3: 8d 14 40  
@@ -229,7 +246,8 @@ __813d:     lda $2002          ; $813d: ad 02 20
             lda $0776          ; $8144: ad 76 07  
             lsr                ; $8147: 4a        
             bcs __8150         ; $8148: b0 06     
-            jsr __8223         ; $814a: 20 23 82  
+;            jsr __8223         ; $814a: 20 23 82  
+            jsr $8223          ; $814a: 20 23 82  
             jsr __81c6         ; $814d: 20 c6 81  
 __8150:     lda $2002          ; $8150: ad 02 20  
             and #$40           ; $8153: 29 40     
@@ -336,16 +354,36 @@ __8212:     lda $0770          ; $8212: ad 70 07
             .hex dc ae 8b      ; $821a: dc ae 8b  Invalid Opcode - NOP __8bae,x
             .hex 83 18         ; $821d: 83 18     Invalid Opcode - SAX ($18,x)
             .hex 92            ; $821f: 92        Invalid Opcode - KIL 
-__8220:     ldy #$00           ; $8220: a0 00     
-__8222:     .hex 2c            ; $8222: 2c        Suspected data
-__8223:     ldy #$04           ; $8223: a0 04     
+
+; here's a subroutine
+; looks like it initializes oam
+; or like, sets sprites off screen
+hide_all_sprites:
+	; probably 0 aka 256
+            ldy #$00           ; $8220: a0 00     
+; maybe this is an alternative entry point to this subroutine
+; that lets you use y as an argument
+; and specify just how much from the top of oam you want to put off screen
+; that would make a lot of sense
+__8222:
+	; although, i'm not sure what bit does?
+	; or what its for here?
+            bit addr04
+
+; MODIFICATION
+;__8222:     .hex 2c            ; $8222: 2c        Suspected data
+;__8223:     ldy #$04           ; $8223: a0 04     
+
+; copy this value to every 4 locations starting at $200
+; this is probably object attribute memory
+; first byte is y, so this is probably putting all sprites offscreen?
             lda #$f8           ; $8225: a9 f8     
-__8227:     sta $0200,y        ; $8227: 99 00 02  
+@loop:      sta $0200,y        ; $8227: 99 00 02  
             iny                ; $822a: c8        
             iny                ; $822b: c8        
-__822c:     iny                ; $822c: c8        
+            iny                ; $822c: c8        
             iny                ; $822d: c8        
-            bne __8227         ; $822e: d0 f7     
+            bne @loop          ; $822e: d0 f7     
             rts                ; $8230: 60        
 
 ;-------------------------------------------------------------------------------
@@ -1192,7 +1230,7 @@ __888a:     .hex f2            ; $888a: f2        Invalid Opcode - KIL
 ;-------------------------------------------------------------------------------
             lda $07a0          ; $889d: ad a0 07  
             bne __88ad         ; $88a0: d0 0b     
-            jsr __8220         ; $88a2: 20 20 82  
+            jsr hide_all_sprites         ; $88a2: 20 20 82  
 __88a5:     lda #$07           ; $88a5: a9 07     
             sta $07a0          ; $88a7: 8d a0 07  
             inc $073c          ; $88aa: ee 3c 07  
@@ -1900,35 +1938,112 @@ __8e04:     asl                ; $8e04: 0a
             jmp ($0006)        ; $8e16: 6c 06 00  
 
 ;-------------------------------------------------------------------------------
-__8e19:     lda $2002          ; $8e19: ad 02 20  
-            lda $0778          ; $8e1c: ad 78 07  
+; a subroutine
+; at first glance it looks like its loading nametables!
+; okay, more like clearing them haha
+; so it.. RESTORES the ppu_ctrl to something
+; then clears nametable A followed by nametable B
+; by setting each tile to $2A, which is the empty tile in chr rom for the bg
+; which is the second pattern table
+; and the attribute tables, it clears them too, setting it all to 0
+; redundantly resets the scrolling twice
+init_bg:
+	; loading ppu status without using the value
+	; probably used to reset the ppu address latch!
+            lda ppu_status     ; $8e19: ad 02 20  
+	; and this is a var in ram
+	; that probably determines what data to load
+	; like, what map to load, i suppose
+	; nah, it looks more like its a mirror of ppu ctrl
+            lda ppu_ctrl_mirror         ; $8e1c: ad 78 07  
+	; take that value, force the 1st bit of the upper nybble = 1
+	; and then mask only the upper nybble
             ora #$10           ; $8e1f: 09 10     
             and #$f0           ; $8e21: 29 f0     
-            jsr __8eed         ; $8e23: 20 ed 8e  
+	; and call this sub routine
+	; which sets the ppu_ctrl
+	; so we're forcing base nametable to be 0
+	; forcing bg pattern table to be the second one
+	; forcing inc vram horizzantally instead of vertically
+	; and forcing sprite patern table to be the first one
+	; the variable bits are the top three:
+	; sprite size, master/slave, and nmi or not
+	; it also mirrors it to addr05
+	; which is where the source of this data is from in the first place
+	; which means.. we're probably Restoring the bits
+	; from some modified state!
+            jsr set_ppu_ctrl   ; $8e23: 20 ed 8e  
+
+	; now call this subroutine with this value in A
+	; well lol thats right in front of us
+	; looks like its just saying, do everything in front
+	; once with $24 as a
+	; and then secondly with $20 as a!
+	; these are the high bytes of the nametable locations
+	; so we're just setting up first nametable A
+	; then nametable B just the same
             lda #$24           ; $8e26: a9 24     
             jsr __8e2d         ; $8e28: 20 2d 8e  
+
 __8e2b:     lda #$20           ; $8e2b: a9 20     
-__8e2d:     sta $2006          ; $8e2d: 8d 06 20  
+
+	; set the high byte of the ppu's address latch
+	; this means, first it's dealing with nametable 1
+	; and secondly, nametable 0
+__8e2d:     sta ppu_addr       ; $8e2d: 8d 06 20  
+	; and start at the base of that nametable
             lda #$00           ; $8e30: a9 00     
-            sta $2006          ; $8e32: 8d 06 20  
+            sta ppu_addr       ; $8e32: 8d 06 20  
+
+	; set up some loop counters
+	; and load tile $24
+	; which is the BLANK tile!
+	; in the second pattern table anyway
+	; but yeah there are 4 sections in a 32x32 grid
+	; so we loop 4 times
+	; the first section only is set 3/4s
+	; which accounts for the final 16th
+	; which isnt present
+	; because its actually a 32x30 grid
+	; so this loop just clears the 32x30 grid of the name table
+	; that was selected in the ppu_addr
             ldx #$04           ; $8e35: a2 04     
+	; y will reset to $ff after the first of the 4 loops
             ldy #$c0           ; $8e37: a0 c0     
             lda #$24           ; $8e39: a9 24     
-__8e3b:     sta $2007          ; $8e3b: 8d 07 20  
+@loop:      sta ppu_data       ; $8e3b: 8d 07 20  
             dey                ; $8e3e: 88        
-            bne __8e3b         ; $8e3f: d0 fa     
+	; aka branch if not 0
+            bne @loop          ; $8e3f: d0 fa     
             dex                ; $8e41: ca        
-            bne __8e3b         ; $8e42: d0 f7     
+            bne @loop          ; $8e42: d0 f7     
+	; done with that loop of clearing the name table
+
+	; set y = $40
+	; x is conveniently 0
+	; so now we set a = 0
+	; and then store 0 in various locations
             ldy #$40           ; $8e44: a0 40     
             txa                ; $8e46: 8a        
-            sta $0300          ; $8e47: 8d 00 03  
-            sta $0301          ; $8e4a: 8d 01 03  
-__8e4d:     sta $2007          ; $8e4d: 8d 07 20  
+            sta addr06         ; $8e47: 8d 00 03  
+            sta addr07         ; $8e4a: 8d 01 03  
+	; the next ppu data byte overflows into the attribute table
+	; so this simply loops for the last $40 bytes (1/16 of 32/32)
+	; clearing the attribute table for this nametable
+@loop2:     sta ppu_data       ; $8e4d: 8d 07 20  
             dey                ; $8e50: 88        
-            bne __8e4d         ; $8e51: d0 fa     
-            sta $073f          ; $8e53: 8d 3f 07  
-            sta $0740          ; $8e56: 8d 40 07  
-            jmp __8ee6         ; $8e59: 4c e6 8e  
+            bne @loop2         ; $8e51: d0 fa     
+
+	; and then store a (0) in these places
+	; unsure what they are
+	; but resetting them whatever they are
+            sta addr08         ; $8e53: 8d 3f 07  
+            sta addr09         ; $8e56: 8d 40 07  
+
+	; and continue the subroutine elsewhere
+	; aka, reset the scrolling, and return
+	; this is the end of this subroutine
+            jmp reset_scroll   ; $8e59: 4c e6 8e  
 
 ;-------------------------------------------------------------------------------
 __8e5c:     lda #$01           ; $8e5c: a9 01     
@@ -1977,7 +2092,7 @@ __8e92:     sta $2006          ; $8e92: 8d 06 20
             ora #$04           ; $8ea3: 09 04     
             bcs __8ea9         ; $8ea5: b0 02     
             and #$fb           ; $8ea7: 29 fb     
-__8ea9:     jsr __8eed         ; $8ea9: 20 ed 8e  
+__8ea9:     jsr set_ppu_ctrl   ; $8ea9: 20 ed 8e  
             pla                ; $8eac: 68        
             asl                ; $8ead: 0a        
             bcc __8eb3         ; $8eae: 90 03     
@@ -2009,13 +2124,24 @@ __8edd:     ldx $2002          ; $8edd: ae 02 20
             ldy #$00           ; $8ee0: a0 00     
             lda ($00),y        ; $8ee2: b1 00     
             bne __8e92         ; $8ee4: d0 ac     
-__8ee6:     sta $2005          ; $8ee6: 8d 05 20  
-            sta $2005          ; $8ee9: 8d 05 20  
+
+; short sub routine
+; takes A as argument
+; seems like it has to be 0 ?
+; but anyway, if it is zero, that means it resets scrolling
+reset_scroll:
+            sta ppu_scroll     ; $8ee6: 8d 05 20  
+            sta ppu_scroll     ; $8ee9: 8d 05 20  
             rts                ; $8eec: 60        
 
 ;-------------------------------------------------------------------------------
-__8eed:     sta $2000          ; $8eed: 8d 00 20  
-            sta $0778          ; $8ef0: 8d 78 07  
+; here's a very short sub routine
+; clearly depends on the contetns of the a register
+; perhaps addr05 is just a mirror of ctrl? who knows, not me, not yet
+; but if a is 0, itll disable nmi
+set_ppu_ctrl:
+            sta ppu_ctrl       ; $8eed: 8d 00 20  
+            sta ppu_ctrl_mirror; $8ef0: 8d 78 07  
             rts                ; $8ef3: 60        
 
 ;-------------------------------------------------------------------------------
@@ -2147,7 +2273,7 @@ __8fbc:     .hex 04 30         ; $8fbc: 04 30     Invalid Opcode - NOP $30
 __8fcb:     clc                ; $8fcb: 18        
             .hex ff 23 58      ; $8fcc: ff 23 58  Invalid Opcode - ISC $5823,x
             ldy #$6f           ; $8fcf: a0 6f     
-            jsr __90cc         ; $8fd1: 20 cc 90  
+            jsr init_ram       ; $8fd1: 20 cc 90  
             ldy #$1f           ; $8fd4: a0 1f     
 __8fd6:     sta $07b0,y        ; $8fd6: 99 b0 07  
             dey                ; $8fd9: 88        
@@ -2156,7 +2282,7 @@ __8fd6:     sta $07b0,y        ; $8fd6: 99 b0 07
             sta $07a2          ; $8fde: 8d a2 07  
             jsr __9c03         ; $8fe1: 20 03 9c  
             ldy #$4b           ; $8fe4: a0 4b     
-            jsr __90cc         ; $8fe6: 20 cc 90  
+            jsr init_ram       ; $8fe6: 20 cc 90  
             ldx #$21           ; $8fe9: a2 21     
             lda #$00           ; $8feb: a9 00     
 __8fed:     sta $0780,x        ; $8fed: 9d 80 07  
@@ -2256,20 +2382,52 @@ __90b6:     lda __8fcb,y       ; $90b6: b9 cb 8f
             rts                ; $90cb: 60        
 
 ;-------------------------------------------------------------------------------
-__90cc:     ldx #$07           ; $90cc: a2 07     
+; here's a subroutine
+; let's see what it does
+; looks like this subroutine takes y as an argument
+; on startup: y = either $d6 or $fe
+; looks like its used to clear some mememory
+; it looks like it writes zeros to different sections of ram
+; starting at page $07 it works its way down, clearing it
+; oh yes! and on the stack page ($01) it 
+; and my guess, is that some of this memory stores high scores!
+; near the top of the ram
+; i think, this routine clears all ram except for the very top
+; specified by the y register
+; (and not the stack either)
+; and when the game is reset, the high scores are intended to be saved!
+; also it looks like this subroutine exits with a = 0
+init_ram:
+	; do a thing, 8 times?
+	; or 7?
+	; question: does bpl branch on 0? or 1+?
+            ldx #$07           ; $90cc: a2 07     
             lda #$00           ; $90ce: a9 00     
-            sta $06            ; $90d0: 85 06     
-__90d2:     stx $07            ; $90d2: 86 07     
-__90d4:     cpx #$01           ; $90d4: e0 01     
-            bne __90dc         ; $90d6: d0 04     
+	; set zp01 to 0
+	; oh, this is a 16-bit address pair
+	; looks like this is just used as an address holder!
+	; instead of a 16bit register being used to point somewher,
+	; indirect memory is used!
+            sta zp01           ; $90d0: 85 06     
+@loop1:     stx zp02           ; $90d2: 86 07     
+	; check if this is the stack page
+@loop2:     cpx #$01           ; $90d4: e0 01     
+            bne @skip          ; $90d6: d0 04     
+
+	; when on the stack page,
+	; only clear under? $60,
+	; so i guses its preserving the first part of the stack
             cpy #$60           ; $90d8: c0 60     
-            bcs __90de         ; $90da: b0 02     
-__90dc:     sta ($06),y        ; $90dc: 91 06     
-__90de:     dey                ; $90de: 88        
+            bcs @skip2         ; $90da: b0 02     
+
+@skip:      sta (zp01),y        ; $90dc: 91 06     
+	; keep doing the inner loop until y underflows
+@skip2:     dey                ; $90de: 88        
             cpy #$ff           ; $90df: c0 ff     
-            bne __90d4         ; $90e1: d0 f1     
+            bne @loop2         ; $90e1: d0 f1     
+	; keep doing the outer loop x times
             dex                ; $90e3: ca        
-            bpl __90d2         ; $90e4: 10 ec     
+            bpl @loop1         ; $90e4: 10 ec     
             rts                ; $90e6: 60        
 
 ;-------------------------------------------------------------------------------
@@ -2308,7 +2466,9 @@ __911c:     brk                ; $911c: 00
             jsr $50b0          ; $911d: 20 b0 50  
             brk                ; $9120: 00        
             brk                ; $9121: 00        
-            bcs __90d4         ; $9122: b0 b0     
+;            bcs __90d4         ; $9122: b0 b0     
+; MODIFICATION
+            .hex b0 b0
             .hex f0            ; $9124: f0        Suspected data
 __9125:     brk                ; $9125: 00        
             jsr $0000          ; $9126: 20 00 00  
@@ -16506,7 +16666,7 @@ __f977:     clc                ; $f977: 18
             .hex 73 fb         ; $f9b4: 73 fb     Invalid Opcode - RRA ($fb),y
             asl $2d0f,x        ; $f9b6: 1e 0f 2d  
 __f9b9:     sty $2c            ; $f9b9: 84 2c     
-            bit __822c         ; $f9bb: 2c 2c 82  
+            bit $822c          ; $f9bb: 2c 2c 82  
             .hex 04 2c         ; $f9be: 04 2c     Invalid Opcode - NOP $2c
             .hex 04 85         ; $f9c0: 04 85     Invalid Opcode - NOP $85
             bit $2c84          ; $f9c2: 2c 84 2c  
