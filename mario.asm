@@ -110,7 +110,8 @@ reset:      sei                ; $8000: 78
 	; i beleive that means it mutes it?
             sta dmc_raw        ; $802e: 8d 11 40  
 	; here's a var in ram being cleared
-            sta addr03         ; $8031: 8d 70 07  
+	; is this apu status mirror?
+            sta apu_status_mirror         ; $8031: 8d 70 07  
 	; and here the last byte in ram is being set to this!
 	; which is what enables the reset code
 	; to distinguish power on from reset, i beleive
@@ -157,8 +158,14 @@ table02:
 ; jsut a guess, because i saw it when looking at nsfs
 ; so this must be where to jump to to trigger audio routine?
 ; unsure /exactly/
-__8080:     brk                ; $8080: 00        
-            rti                ; $8081: 40        
+; hmm, is this data instead?
+; it looks like its being loaded according to an index
+; when the same index thats used in the tables above is 6
+; then it grabs the second byte here, else the first
+data01:
+             .hex 00 40
+;            brk                ; $8080: 00        
+;            rti                ; $8081: 40        
 
 ;-------------------------------------------------------------------------------
 ; nmi vector
@@ -238,74 +245,159 @@ __80a9:     lda #$00           ; $80a9: a9 00
 	; then call this subroutine
             jsr subroutine04   ; $80c3: 20 dd 8e  
 
+	; now grabbing addr12 again
+	; and letting y = 0
             ldy #$00           ; $80c6: a0 00     
-            ldx $0773          ; $80c8: ae 73 07  
+            ldx addr12         ; $80c8: ae 73 07  
+	; and if x is 6 this time, make y 1 instead
             cpx #$06           ; $80cb: e0 06     
-            bne __80d0         ; $80cd: d0 01     
+            bne @skip          ; $80cd: d0 01     
             iny                ; $80cf: c8        
-__80d0:     ldx __8080,y       ; $80d0: be 80 80  
+	; now... loading x with whatevers at 8080?
+	; which would be 0 if y is 0, and $40 if its 1?
+@skip:      ldx data01,y       ; $80d0: be 80 80  
+	; now clearing two bytes offset from ram at $300
+	; are these related to name tables?
+	; why are they overlapping like that?
             lda #$00           ; $80d3: a9 00     
-            sta $0300,x        ; $80d5: 9d 00 03  
-            sta $0301,x        ; $80d8: 9d 01 03  
-            sta $0773          ; $80db: 8d 73 07  
-            lda $0779          ; $80de: ad 79 07  
-            sta $2001          ; $80e1: 8d 01 20  
-            jsr __f2d1         ; $80e4: 20 d1 f2  
-            jsr __8e5c         ; $80e7: 20 5c 8e  
-            jsr __8182         ; $80ea: 20 82 81  
-            jsr __8f97         ; $80ed: 20 97 8f  
-            lda $0776          ; $80f0: ad 76 07  
+            sta addr06,x       ; $80d5: 9d 00 03  
+            sta addr07,x       ; $80d8: 9d 01 03  
+	; and also resetting the address
+            sta addr12         ; $80db: 8d 73 07  
+	; and simply restore the ppu mask
+            lda ppu_mask_mirror; $80de: ad 79 07  
+            sta ppu_mask       ; $80e1: 8d 01 20  
+	; now several subroutines to check
+	; this one has to do with sound
+            jsr subroutine06   ; $80e4: 20 d1 f2  
+	; whats this one?
+	; something to do with checking controllers
+            jsr subroutine07         ; $80e7: 20 5c 8e  
+	; and this handles pausing the game when pressing start
+            jsr handle_pause         ; $80ea: 20 82 81  
+	; some subtraction loop and small data copy
+            jsr subroutine09         ; $80ed: 20 97 8f  
+
+	; now grab addr19
+            lda addr19          ; $80f0: ad 76 07  
+	; divide by 2
             lsr                ; $80f3: 4a        
-            bcs __811b         ; $80f4: b0 25     
-            lda $0747          ; $80f6: ad 47 07  
-            beq __8100         ; $80f9: f0 05     
+	; if first bit was 1, jump to 5
+	; so basically, UNLESS BIT 1 OF ADDR19
+	; do this counter thing
+	; where the counter is counted down	
+	; and once its to 0
+	; do some loop
+            bcs @skip5         ; $80f4: b0 25     
+	; otherwise continue here
+	; load addr21
+            lda addr21          ; $80f6: ad 47 07  
+	; and continue here if its set to anything
+            beq @skip2         ; $80f9: f0 05     
+	; so if its set, decrement it
+	; so if its not set, keep it at 0
+	; and then also skip to below
             dec $0747          ; $80fb: ce 47 07  
-            bne __8119         ; $80fe: d0 19     
-__8100:     ldx #$14           ; $8100: a2 14     
-            dec $077f          ; $8102: ce 7f 07  
-            bpl __810e         ; $8105: 10 07     
+            bne @skip3         ; $80fe: d0 19     
+	; so once the counter is at 0
+	; keep it there and do this stuff
+	; this is aa  loop
+	; setup for x = 14
+	; decrement some value
+@skip2:     ldx #$14           ; $8100: a2 14     
+            dec addr22          ; $8102: ce 7f 07  
+            bpl @loop         ; $8105: 10 07     
+	; and when it gets to 0
+	; then reset it at 0x11
             lda #$11           ; $8107: a9 11     
-            sta $077f          ; $8109: 8d 7f 07  
+            sta addr22          ; $8109: 8d 7f 07  
+	; and also make x = 23 instead
             ldx #$23           ; $810c: a2 23     
-__810e:     lda $0780,x        ; $810e: bd 80 07  
-            beq __8116         ; $8111: f0 03     
-            dec $0780,x        ; $8113: de 80 07  
-__8116:     dex                ; $8116: ca        
-            bpl __810e         ; $8117: 10 f5     
-__8119:     inc $09            ; $8119: e6 09     
-__811b:     ldx #$00           ; $811b: a2 00     
+	; and heres the loop
+	; looks like its going through, and decreminting values
+	; in an array, that aren't 0 yet
+	; until they get to 0
+@loop:      lda addr23,x        ; $810e: bd 80 07  
+            beq @skip4         ; $8111: f0 03     
+            dec addr23,x        ; $8113: de 80 07  
+@skip4:     dex                ; $8116: ca        
+            bpl @loop         ; $8117: 10 f5     
+	; so i guess, decremente these counters
+	; at some divided rate?
+
+	; skip here if that counter was not to 0 yet
+	; so anyway, whats next
+@skip3:     inc zp05            ; $8119: e6 09     
+	; prepare for loop below, looping 7 times
+	; counting up from 0 = x
+@skip5:     ldx #$00           ; $811b: a2 00     
             ldy #$07           ; $811d: a0 07     
-            lda $07a7          ; $811f: ad a7 07  
+	; whats this val?
+	; seems related to the reset switch thing?
+            lda addr02          ; $811f: ad a7 07  
             and #$02           ; $8122: 29 02     
-            sta $00            ; $8124: 85 00     
-            lda $07a8          ; $8126: ad a8 07  
+            sta zp03            ; $8124: 85 00     
+            lda addr24          ; $8126: ad a8 07  
             and #$02           ; $8129: 29 02     
-            eor $00            ; $812b: 45 00     
+            eor zp03            ; $812b: 45 00     
             clc                ; $812d: 18        
-            beq __8131         ; $812e: f0 01     
-__8130:     sec                ; $8130: 38        
-__8131:     ror $07a7,x        ; $8131: 7e a7 07  
+	; depending on something?
+	; some xor mask?
+	; do the rotation loop of addr02
+	; with or without carry set
+            beq @loop2         ; $812e: f0 01     
+            sec                ; $8130: 38        
+	; so rotating this value 7 times?
+	; also with clear set,
+	; basically causing it to be doubled and then +1'd?
+@loop2:     ror addr02,x        ; $8131: 7e a7 07  
             inx                ; $8134: e8        
             dey                ; $8135: 88        
-            bne __8131         ; $8136: d0 f9     
-            lda $0722          ; $8138: ad 22 07  
-            beq __815c         ; $813b: f0 1f     
-__813d:     lda $2002          ; $813d: ad 02 20  
+            bne @loop2         ; $8136: d0 f9     
+
+	
+	; i wonder if addr25 has to do with jumping?
+	; now only do the following, 
+            lda addr25          ; $8138: ad 22 07  
+            beq @skip6         ; $813b: f0 1f     
+	; if addr25
+	; {
+	; this waits for a sprite 0 hit?
+@loop3:     lda ppu_status          ; $813d: ad 02 20  
             and #$40           ; $8140: 29 40     
-            bne __813d         ; $8142: d0 f9     
-            lda $0776          ; $8144: ad 76 07  
+            bne @loop3         ; $8142: d0 f9     
+
+	; now sprite0 hit happened, yes?
+            lda addr19          ; $8144: ad 76 07  
             lsr                ; $8147: 4a        
-            bcs __8150         ; $8148: b0 06     
+	; skip to loop4 if lowest bit of addr19
+            bcs @loop4         ; $8148: b0 06     
 ;            jsr __8223         ; $814a: 20 23 82  
-            jsr $8223          ; $814a: 20 23 82  
+	; otherwise, call these two subroutines
+	; this subroutine has something to do with
+	; cleaning up Particle sprites????
+            jsr hide_4_sprites          ; $814a: 20 23 82  
+	; and without this, the game freezes
+	; when mario hits a coin block!
             jsr __81c6         ; $814d: 20 c6 81  
-__8150:     lda $2002          ; $8150: ad 02 20  
+
+	; wait for sprite 0 hit again?
+@loop4:     lda ppu_status          ; $8150: ad 02 20  
             and #$40           ; $8153: 29 40     
-            beq __8150         ; $8155: f0 f9     
+            beq @loop4         ; $8155: f0 f9     
+
+	; and then burn $14 loops worth of cycles?
             ldy #$14           ; $8157: a0 14     
-__8159:     dey                ; $8159: 88        
-            bne __8159         ; $815a: d0 fd     
-__815c:     lda $073f          ; $815c: ad 3f 07  
+	; while y, loop
+	; just burn cycles?
+	;   {
+@loop5:     dey                ; $8159: 88        
+            bne @loop5         ; $815a: d0 fd     
+	;   }
+	; }
+
+	; next section
+@skip6:     lda $073f          ; $815c: ad 3f 07  
             sta $2005          ; $815f: 8d 05 20  
             lda $0740          ; $8162: ad 40 07  
             sta $2005          ; $8165: 8d 05 20  
@@ -314,48 +406,62 @@ __815c:     lda $073f          ; $815c: ad 3f 07
             sta $2000          ; $816c: 8d 00 20  
             lda $0776          ; $816f: ad 76 07  
             lsr                ; $8172: 4a        
-            bcs __8178         ; $8173: b0 03     
+            bcs @skip7         ; $8173: b0 03     
             jsr __8212         ; $8175: 20 12 82  
-__8178:     lda $2002          ; $8178: ad 02 20  
+@skip7:     lda $2002          ; $8178: ad 02 20  
             pla                ; $817b: 68        
             ora #$80           ; $817c: 09 80     
             sta $2000          ; $817e: 8d 00 20  
             rti                ; $8181: 40        
 
 ;-------------------------------------------------------------------------------
-__8182:     lda $0770          ; $8182: ad 70 07  
+; this is related to pausing the game with he start button!
+handle_pause:
+            lda apu_status_mirror          ; $8182: ad 70 07  
+	; checking to see if the second pulse only is enabled?
             cmp #$02           ; $8185: c9 02     
-            beq __8194         ; $8187: f0 0b     
+            beq @skip         ; $8187: f0 0b     
+	; otherwise, leave this if only first pluse is enabled
             cmp #$01           ; $8189: c9 01     
-            bne __81c5         ; $818b: d0 38     
-            lda $0772          ; $818d: ad 72 07  
+            bne @ret         ; $818b: d0 38     
+	; otherwise, grab this value
+	; and also only continue if this value is exactly %11
+            lda addr17          ; $818d: ad 72 07  
             cmp #$03           ; $8190: c9 03     
-            bne __81c5         ; $8192: d0 31     
-__8194:     lda $0777          ; $8194: ad 77 07  
-            beq __819d         ; $8197: f0 04     
-            dec $0777          ; $8199: ce 77 07  
+            bne @ret         ; $8192: d0 31   
+	; skip here if second pulse only is enabled?
+	; if this value is set, decrease it, and return
+	; so basically, its like a timer or somethin?
+	; and when it gets to zero, if the above allow, 
+	; then continue, othewise wait
+@skip:      lda addr18          ; $8194: ad 77 07  
+            beq @skip2         ; $8197: f0 04     
+            dec addr18          ; $8199: ce 77 07  
             rts                ; $819c: 60        
 
-;-------------------------------------------------------------------------------
-__819d:     lda $06fc          ; $819d: ad fc 06  
+	; continue here if the counter gets to 0
+	; this is checking , i think
+	; if a controller button is pressed
+	; i think this would be start button?
+@skip2:     lda addr13         ; $819d: ad fc 06  
             and #$10           ; $81a0: 29 10     
-            beq __81bd         ; $81a2: f0 19     
-            lda $0776          ; $81a4: ad 76 07  
+            beq @skip4         ; $81a2: f0 19     
+            lda addr19          ; $81a4: ad 76 07  
             and #$80           ; $81a7: 29 80     
-            bne __81c5         ; $81a9: d0 1a     
+            bne @ret         ; $81a9: d0 1a     
             lda #$2b           ; $81ab: a9 2b     
-            sta $0777          ; $81ad: 8d 77 07  
-            lda $0776          ; $81b0: ad 76 07  
+            sta addr18          ; $81ad: 8d 77 07  
+            lda addr19          ; $81b0: ad 76 07  
             tay                ; $81b3: a8        
             iny                ; $81b4: c8        
             sty $fa            ; $81b5: 84 fa     
             eor #$01           ; $81b7: 49 01     
             ora #$80           ; $81b9: 09 80     
-            bne __81c2         ; $81bb: d0 05     
-__81bd:     lda $0776          ; $81bd: ad 76 07  
+            bne @skip3         ; $81bb: d0 05     
+@skip4:     lda addr19          ; $81bd: ad 76 07  
             and #$7f           ; $81c0: 29 7f     
-__81c2:     sta $0776          ; $81c2: 8d 76 07  
-__81c5:     rts                ; $81c5: 60        
+@skip3:     sta addr19          ; $81c2: 8d 76 07  
+@ret:       rts                ; $81c5: 60        
 
 ;-------------------------------------------------------------------------------
 __81c6:     ldy $074e          ; $81c6: ac 4e 07  
@@ -415,14 +521,24 @@ hide_all_sprites:
 ; that lets you use y as an argument
 ; and specify just how much from the top of oam you want to put off screen
 ; that would make a lot of sense
-__8222:
+;__8222:
 	; although, i'm not sure what bit does?
 	; or what its for here?
-            bit addr04
+;            bit addr04
+
+; okay what!!
+; nmi is jumping to address $8223
+; which... is ldy #$04
+; but when you start from the above entry, 
+; it sees a three byte BIT instruction
+; so its used as a nop!!!
+; omg thats amazing
+; BIT LITERALLY IS USED AS A THREE BYTE NOP..
+; AND USED TO SKIP OVER BYTES IN THAT ENTRY POINT!!!
 
 ; MODIFICATION
-;__8222:     .hex 2c            ; $8222: 2c        Suspected data
-;__8223:     ldy #$04           ; $8223: a0 04     
+__8222:     .hex 2c            ; $8222: 2c        Suspected data
+hide_4_sprites:     ldy #$04           ; $8223: a0 04     
 
 ; copy this value to every 4 locations starting at $200
 ; this is probably object attribute memory
@@ -2096,37 +2212,94 @@ __8e2d:     sta ppu_addr       ; $8e2d: 8d 06 20
             jmp reset_scroll   ; $8e59: 4c e6 8e  
 
 ;-------------------------------------------------------------------------------
-__8e5c:     lda #$01           ; $8e5c: a9 01     
-            sta $4016          ; $8e5e: 8d 16 40  
+; heres a sub routine
+; i think this ruotine checks controllers for input
+; and also something to do with button ticks
+; rather than continuous?
+subroutine07:
+	; strobe the controllers
+            lda #$01           ; $8e5c: a9 01     
+            sta joy1          ; $8e5e: 8d 16 40  
+	; and then lsr a making it $80 ?
+	; oh wait thats wrong
+	; logical shift right doesnt /rotate/
+	; just fills the leftmost bit with 0
+	; so this is really just a quick way to clear a
+	; in this context
             lsr                ; $8e61: 4a        
+	; and putting it on x
             tax                ; $8e62: aa        
-            sta $4016          ; $8e63: 8d 16 40  
-            jsr __8e6a         ; $8e66: 20 6a 8e  
+	; and then storing it on joy1 again?
+	; but whats the pooint of writing 0 here?
+	; so is that bit directly attached to the /oe1 and /oe2?
+	; meaning you actually have to control the raw elcetrical sygnal here?
+	; meaning, i have to turn it on, and then off, for a complete strobe
+	; thats my current working hypotheses anyway!
+	; actually idk at all lol
+            sta joy1          ; $8e63: 8d 16 40  
+	; now do this routine, after strobing 
+	; and with x = 0
+	; oh, nevermind,
+	; just do the following with x = 0
+	; followed by with x = 1
+	; probably x indicates the controller number
+            jsr @skip         ; $8e66: 20 6a 8e  
             inx                ; $8e69: e8        
-__8e6a:     ldy #$08           ; $8e6a: a0 08     
-__8e6c:     pha                ; $8e6c: 48        
-            lda $4016,x        ; $8e6d: bd 16 40  
-            sta $00            ; $8e70: 85 00     
+	; so, yeah, for each controller:
+	; y = 8 for loop
+	; push a (which starts at 0, right?)
+@skip:     ldy #$08           ; $8e6a: a0 08     
+	; so a here is a bit mask, i think
+@loop:     pha                ; $8e6c: 48        
+	; get either joy1 or joy2
+            lda joy1,x        ; $8e6d: bd 16 40  
+	; store a at zp 0
+	; hey, those values must indicate controllers??
+	; storing it, "smearing" it to the right?
+	; and then dividing by 2?
+            sta zp03            ; $8e70: 85 00     
             lsr                ; $8e72: 4a        
-            ora $00            ; $8e73: 05 00     
+            ora zp03            ; $8e73: 05 00     
             lsr                ; $8e75: 4a        
+	; not sure what the point is
+	; since now we're grabbing the original a again
             pla                ; $8e76: 68        
+	; double the OG value
+	; its probably a mask?
             rol                ; $8e77: 2a        
+	; and then iterate
             dey                ; $8e78: 88        
-            bne __8e6c         ; $8e79: d0 f1     
-            sta $06fc,x        ; $8e7b: 9d fc 06  
+            bne @loop         ; $8e79: d0 f1     
+	
+	; so then putting a here
+	; depending on the controller
+	; i wonder if this is simply where the controller is stored?
+            sta addr13,x        ; $8e7b: 9d fc 06  
+	; push a
             pha                ; $8e7e: 48        
+	; set the first 2 bits
             and #$30           ; $8e7f: 29 30     
-            and $074a,x        ; $8e81: 3d 4a 07  
-            beq __8e8d         ; $8e84: f0 07     
+	; and masking it with a controller dependant mask starting here?
+            and addr15,x        ; $8e81: 3d 4a 07  
+	; and if none of Those buttons are pressed
+	; then skip the rest
+            beq @skip2         ; $8e84: f0 07     
+	; but if so, continue
+	; some of those buttons were pressed:
             pla                ; $8e86: 68        
+	; so here, disable bits 4 and 5
+	; and store them in this place
             and #$cf           ; $8e87: 29 cf     
-            sta $06fc,x        ; $8e89: 9d fc 06  
+            sta addr13,x        ; $8e89: 9d fc 06  
             rts                ; $8e8c: 60        
 
-;-------------------------------------------------------------------------------
-__8e8d:     pla                ; $8e8d: 68        
-            sta $074a,x        ; $8e8e: 9d 4a 07  
+	; none of those buttons were pressed (i think)
+	; grab og a and put it in that mask area?
+	; oh! i know what is is..
+	; this is a routine to check and see thi FIRST time
+	; some selected buttons were pressed
+@skip2:     pla                ; $8e8d: 68        
+            sta addr15,x        ; $8e8e: 9d 4a 07  
             rts                ; $8e91: 60        
 
 ;-------------------------------------------------------------------------------
@@ -2356,26 +2529,41 @@ __8f91:     inc $0133,x        ; $8f91: fe 33 01
             jmp __8f75         ; $8f94: 4c 75 8f  
 
 ;-------------------------------------------------------------------------------
-__8f97:     ldx #$05           ; $8f97: a2 05     
-            jsr __8f9e         ; $8f99: 20 9e 8f  
+; this does some subtraction loop and then copies some data
+; unsure what though
+subroutine09:
+	; do the following once with x = 05
+	; and then again with x = 0b
+            ldx #$05           ; $8f97: a2 05     
+            jsr @skip         ; $8f99: 20 9e 8f  
             ldx #$0b           ; $8f9c: a2 0b     
-__8f9e:     ldy #$05           ; $8f9e: a0 05     
+	; loop with y 5 times, i think, somethin like that
+@skip:      ldy #$05           ; $8f9e: a0 05     
+	; and first before looping, set carry
+	; (for subtracting with borrow)
             sec                ; $8fa0: 38        
-__8fa1:     lda $07dd,x        ; $8fa1: bd dd 07  
-            sbc $07d7,y        ; $8fa4: f9 d7 07  
+	; so, grab addr20 var
+	; and subtract the value at addr01, y times
+	; still not sure if bpl branches on 0 too
+@loop:      lda addr20,x        ; $8fa1: bd dd 07  
+            sbc addr01,y        ; $8fa4: f9 d7 07  
             dex                ; $8fa7: ca        
             dey                ; $8fa8: 88        
-            bpl __8fa1         ; $8fa9: 10 f6     
-            bcc __8fbb         ; $8fab: 90 0e     
+            bpl @loop         ; $8fa9: 10 f6     
+	; carry clear means, subtaction underflowed/borrowed
+	; so done, if it overflowes
+            bcc @ret         ; $8fab: 90 0e     
+	; otherwise, uh, do a loop copying something from addr20 to addr01?
+	; unsure
             inx                ; $8fad: e8        
             iny                ; $8fae: c8        
-__8faf:     lda $07dd,x        ; $8faf: bd dd 07  
-            sta $07d7,y        ; $8fb2: 99 d7 07  
+@loop2:     lda addr20,x        ; $8faf: bd dd 07  
+            sta addr01,y        ; $8fb2: 99 d7 07  
             inx                ; $8fb5: e8        
             iny                ; $8fb6: c8        
             cpy #$06           ; $8fb7: c0 06     
-            bcc __8faf         ; $8fb9: 90 f4     
-__8fbb:     rts                ; $8fbb: 60        
+            bcc @loop2         ; $8fb9: 90 f4     
+@ret:       rts                ; $8fbb: 60        
 
 ;-------------------------------------------------------------------------------
 __8fbc:     .hex 04 30         ; $8fbc: 04 30     Invalid Opcode - NOP $30
@@ -15897,16 +16085,31 @@ __f2a7:     ora $04            ; $f2a7: 05 04
             rts                ; $f2d0: 60        
 
 ;-------------------------------------------------------------------------------
-__f2d1:     lda $0770          ; $f2d1: ad 70 07  
-            bne __f2da         ; $f2d4: d0 04     
-            sta $4015          ; $f2d6: 8d 15 40  
+; oooh shiny suborutine, whats this do!
+; something to do with sound?
+; yeah this is totally sound stuff
+subroutine06:
+	; so then, does addr03 hold a mirror of apu status?
+            lda apu_status_mirror         ; $f2d1: ad 70 07  
+            bne @skip         ; $f2d4: d0 04     
+	; if nothing, just store it back?
+	; so basically.... restore apu status to 0
+            sta apu_status        ; $f2d6: 8d 15 40  
             rts                ; $f2d9: 60        
 
 ;-------------------------------------------------------------------------------
-__f2da:     lda #$ff           ; $f2da: a9 ff     
-            sta $4017          ; $f2dc: 8d 17 40  
+; if anything in apu status mirror is set
+; skip here instead
+; basically, if sound is enabled at all, come here
+@skip:
+	; enable frame counter irqs
+	; and mode 1, whatever that is, not sure yet
+            lda #$ff           ; $f2da: a9 ff     
+            sta frame_counter          ; $f2dc: 8d 17 40  
+	; and enable all channels but dmc
             lda #$0f           ; $f2df: a9 0f     
-            sta $4015          ; $f2e1: 8d 15 40  
+            sta apu_status          ; $f2e1: 8d 15 40  
+
             lda $07c6          ; $f2e4: ad c6 07  
             bne __f2ef         ; $f2e7: d0 06     
             lda $fa            ; $f2e9: a5 fa     
@@ -17316,7 +17519,7 @@ __fd4a:     .hex 1a            ; $fd4a: 1a        Invalid Opcode - NOP
             sta $04            ; $fd78: 85 04     
             sta ($22,x)        ; $fd7a: 81 22     
             stx $30            ; $fd7c: 86 30     
-            rol __8130         ; $fd7e: 2e 30 81  
+            rol $8130         ; $fd7e: 2e 30 81  
             .hex 04 22         ; $fd81: 04 22     Invalid Opcode - NOP $22
             rol $2a            ; $fd83: 26 2a     
             bit __862e         ; $fd85: 2c 2e 86  

@@ -1,3 +1,4 @@
+$F2DA#@skip#
 $C01D#__c01d#
 $C03A#__c03a#
 $C042#__c042#
@@ -949,8 +950,6 @@ $F289#__f289#
 $F29A#__f29a#
 $F29D#__f29d#
 $F2A7#__f2a7#
-$F2D1#__f2d1#
-$F2DA#__f2da#
 $F2EF#__f2ef#
 $F313#__f313#
 $F317#__f317#
@@ -1190,4 +1189,5 @@ $FFA2#__ffa2#
 $FFC9#__ffc9#
 $FFEA#__ffea#
 $FFF0#irq#
+$F2D1#subroutine06#
 $FFFA#vectors#

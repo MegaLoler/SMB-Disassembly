@@ -1,6 +1,5 @@
 $07D7#addr01#
 $07A7#addr02#
-$0770#addr03#
 $04A0#addr04#
 $0300#addr06#
 $0301#addr07#
@@ -8,8 +7,24 @@ $073F#addr08#
 $0740#addr09#
 $0774#addr10#
 $0773#addr12#
+$06FC#addr13#
+$06FD#addr14#
+$074A#addr15#
+$074B#addr16#
+$0772#addr17#
+$0777#addr18#
+$0776#addr19#
+$07DD#addr20#
+$0747#addr21#
+$077F#addr22#
+$0780#addr23#
+$07A8#addr24#
+$0722#addr25#
 $4015#apu_status#
+$0770#apu_status_mirror#
 $4011#dmc_raw#
+$4017#frame_counter#
+$4016#joy1#
 $2003#oam_addr#
 $4014#oam_dma#
 $2006#ppu_addr#
@@ -24,3 +39,4 @@ $07FF#reset_switch#
 $0006#zp01#
 $0007#zp02#
 $0000#zp03#
+$0001#zp04#
