@@ -1,9 +1,10 @@
 $8057#@halt#
-$8E3B#@loop#
+$8EB6#@loop#
 $90D2#@loop1#
 $90D4#@loop2#
 $90DC#@skip#
 $90DE#@skip2#
+$8EB9#@skip3#
 $800A#@vblank_wait#
 $800F#@vblank_wait2#
 $8080#__8080#
@@ -224,11 +225,6 @@ $8E5C#__8e5c#
 $8E6A#__8e6a#
 $8E6C#__8e6c#
 $8E8D#__8e8d#
-$8EA9#__8ea9#
-$8EB3#__8eb3#
-$8EB6#__8eb6#
-$8EB9#__8eb9#
-$8EBB#__8ebb#
 $8EF4#__8ef4#
 $8EF5#__8ef5#
 $8F00#__8f00#

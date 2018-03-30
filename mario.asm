@@ -2130,47 +2130,106 @@ __8e8d:     pla                ; $8e8d: 68
             rts                ; $8e91: 60        
 
 ;-------------------------------------------------------------------------------
+; so like, my guess is that these routines have something to do with 
+; loading level data? or some other variable data
+; from Linked Lists of some kind
+; into ppu
+; so we are jumping here because a was greater than 0
+; a was the first element in the array pointed to be the first two bytes in ram
+; and y was 0, the first element
+; !! my guess.... is that these arrays.... are $00 terminated!!
+; and each entry in the array is handled here...
 subroutine05:
-            sta $2006          ; $8e92: 8d 06 20  
+	; so what, is the first item in these sequences a ppu addres?
+	; so yeah, grab the high byte, and then the low byte
+	; and store them
+	; (the high byte was already grabbed, u c)
+            sta ppu_addr       ; $8e92: 8d 06 20  
             iny                ; $8e95: c8        
             lda ($00),y        ; $8e96: b1 00     
-            sta $2006          ; $8e98: 8d 06 20  
+            sta ppu_addr       ; $8e98: 8d 06 20  
+
+	; now grabbing the next byte
+	; and double it?
             iny                ; $8e9b: c8        
             lda ($00),y        ; $8e9c: b1 00     
             asl                ; $8e9e: 0a        
+	; and push it onto the stack?
             pha                ; $8e9f: 48        
-            lda $0778          ; $8ea0: ad 78 07  
+	; now grab the mirror of ppu ctrl
+            lda ppu_ctrl_mirror; $8ea0: ad 78 07  
+	; and set the bit to make vram address increment downward?
             ora #$04           ; $8ea3: 09 04     
-            bcs __8ea9         ; $8ea5: b0 02     
+	; im guessing the carry bit here is detemermined by that asl
+	; so if didn't overflow, force sprite table as table A?
+            bcs @skip          ; $8ea5: b0 02     
             and #$fb           ; $8ea7: 29 fb     
-__8ea9:     jsr set_ppu_ctrl   ; $8ea9: 20 ed 8e  
+@skip:      jsr set_ppu_ctrl   ; $8ea9: 20 ed 8e  
+	; and now grab that doubled value back
             pla                ; $8eac: 68        
             asl                ; $8ead: 0a        
-            bcc __8eb3         ; $8eae: 90 03     
+	; and double it again!!
+            bcc @skip2         ; $8eae: 90 03     
+	; this time, if it overflowed, 
+	; basically add 2?
+	; and i suppose skip a byte in the sequence, hm
             ora #$02           ; $8eb0: 09 02     
             iny                ; $8eb2: c8        
-__8eb3:     lsr                ; $8eb3: 4a        
+	; anyways, divide it back down twice
+	; of course the top two bits will be chopped off now
+@skip2:     lsr                ; $8eb3: 4a        
             lsr                ; $8eb4: 4a        
+	; and transfer that value to x
+	; being used as a counter it seems
+	; !! that value must be how many subsequent values to copy in the sequence!!
             tax                ; $8eb5: aa        
-__8eb6:     bcs __8eb9         ; $8eb6: b0 01     
+	; and uh, i imagine carry will be set after that in the case that 2 was added
+	; perhaps thats a way to relay the fact that it overflowed originally??
+	; but anyway, in that case, dont inc y
+	; i assume because its already bee nincremented?
+	; not sure what the point of that is actually
+	; guess we'll find otu later
+@loop:      bcs @skip3         ; $8eb6: b0 01     
             iny                ; $8eb8: c8        
-__8eb9:     lda ($00),y        ; $8eb9: b1 00     
-__8ebb:     sta $2007          ; $8ebb: 8d 07 20  
+	; so anyway, loop that many times
+	; simply loading bytes in the sequence
+	; and copying it to ppu 
+@skip3:     lda ($00),y        ; $8eb9: b1 00     
+            sta ppu_data       ; $8ebb: 8d 07 20  
             dex                ; $8ebe: ca        
-            bne __8eb6         ; $8ebf: d0 f5     
+            bne @loop          ; $8ebf: d0 f5     
+	
+	; now, set carry
+	; transfer the value of y to a
+	; and add 1 to it?
+	; why not just inc? idk
+	; and then store that value at zp 00???
             sec                ; $8ec1: 38        
             tya                ; $8ec2: 98        
             adc $00            ; $8ec3: 65 00     
-            sta $00            ; $8ec5: 85 00     
+            sta zp03           ; $8ec5: 85 00     
             lda #$00           ; $8ec7: a9 00     
+	; and add 1 to it again,
+	; however i think this means that it will skip 0
+	; so if it overflows, it wont be 0, itll be 1
+	; or maybe , it'll skip 1 instead, dunno
             adc $01            ; $8ec9: 65 01     
+	; and now set the (low byte?) i think
+	; of the pointer
+	; so what. is this a linked list?
             sta $01            ; $8ecb: 85 01     
+	; and now ...
+	; it looks like setting the ppu addr to
+	; the palette data,,, followed by setting it to 00??
+	; whats the point?
+	; :shrug:
             lda #$3f           ; $8ecd: a9 3f     
             sta $2006          ; $8ecf: 8d 06 20  
             lda #$00           ; $8ed2: a9 00     
             sta $2006          ; $8ed4: 8d 06 20  
             sta $2006          ; $8ed7: 8d 06 20  
             sta $2006          ; $8eda: 8d 06 20  
+	; and i guess now we repeat the process with the next link
 
 ; grab ppu status on x
 ; and so the tables near the beginning store
@@ -4358,7 +4417,8 @@ __9e27:     tay                ; $9e27: a8
             .hex 2b 02         ; $9e2f: 2b 02     Invalid Opcode - ANC #$02
             lsr __e165,x       ; $9e31: 5e 65 e1  
             .hex bb 0e db      ; $9e34: bb 0e db  Invalid Opcode - LAS __db0e,y
-            asl __8ebb         ; $9e37: 0e bb 8e  
+;            asl __8ebb         ; $9e37: 0e bb 8e  
+            .hex 0e bb 8e
             .hex db 0e fe      ; $9e3a: db 0e fe  Invalid Opcode - DCP __fe0e,y
             adc $ec            ; $9e3d: 65 ec     
             .hex 0f 0d 4e      ; $9e3f: 0f 0d 4e  Invalid Opcode - SLO $4e0d
