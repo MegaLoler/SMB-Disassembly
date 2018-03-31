@@ -3,8 +3,6 @@ $07A7#addr02#
 $04A0#addr04#
 $0300#addr06#
 $0301#addr07#
-$073F#addr08#
-$0740#addr09#
 $0774#addr10#
 $0773#addr12#
 $06FC#addr13#
@@ -34,6 +32,8 @@ $2007#ppu_data#
 $2001#ppu_mask#
 $0779#ppu_mask_mirror#
 $2005#ppu_scroll#
+$073F#ppu_scroll_mirror_x#
+$0740#ppu_scroll_mirror_y#
 $2002#ppu_status#
 $07FF#reset_switch#
 $0006#zp01#

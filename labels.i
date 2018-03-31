@@ -48,8 +48,9 @@ addr04 = $04a0
 addr06 = $0300
 addr07 = $0301
 
-addr08 = $073f
-addr09 = $0740
+; scroll mirrors!
+ppu_scroll_mirror_x = $073f
+ppu_scroll_mirror_y = $0740
 
 ; looks related to controllers
 addr13 = $06fc

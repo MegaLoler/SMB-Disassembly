@@ -15,13 +15,6 @@ $8178#@skip7#
 $800A#@vblank_wait#
 $800F#@vblank_wait2#
 $80A9#__80a9#
-$81C6#__81c6#
-$81CF#__81cf#
-$81E2#__81e2#
-$81E5#__81e5#
-$81F2#__81f2#
-$81F9#__81f9#
-$8212#__8212#
 $8222#__8222#
 $8234#__8234#
 $823F#__823f#
@@ -205,7 +198,6 @@ $8D89#__8d89#
 $8D8C#__8d8c#
 $8D8D#__8d8d#
 $8DD9#__8dd9#
-$8E04#__8e04#
 $8E2B#__8e2b#
 $8E2D#__8e2d#
 $8EF4#__8ef4#
@@ -856,5 +848,8 @@ $8EDD#subroutine04#
 $8E92#subroutine05#
 $8E5C#subroutine07#
 $8F97#subroutine09#
+$81C6#subroutine10#
+$8212#subroutine11#
+$8E04#subroutine12#
 $805A#table01#
 $806D#table02#

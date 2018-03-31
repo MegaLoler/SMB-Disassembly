@@ -379,7 +379,7 @@ __80a9:     lda #$00           ; $80a9: a9 00
             jsr hide_4_sprites          ; $814a: 20 23 82  
 	; and without this, the game freezes
 	; when mario hits a coin block!
-            jsr __81c6         ; $814d: 20 c6 81  
+            jsr subroutine10         ; $814d: 20 c6 81  
 
 	; wait for sprite 0 hit again?
 @loop4:     lda ppu_status          ; $8150: ad 02 20  
@@ -390,6 +390,11 @@ __80a9:     lda #$00           ; $80a9: a9 00
             ldy #$14           ; $8157: a0 14     
 	; while y, loop
 	; just burn cycles?
+	; oh, so this is used to prevent scrolling!!
+	; so this is actually waiting for things to START DRAWING
+	; and the it waits precisely for the right time
+	; for when after the top of the screen is drawn
+	; and then belewo , i imagine itll handle scrolling or somethin
 	;   {
 @loop5:     dey                ; $8159: 88        
             bne @loop5         ; $815a: d0 fd     
@@ -397,21 +402,39 @@ __80a9:     lda #$00           ; $80a9: a9 00
 	; }
 
 	; next section
-@skip6:     lda $073f          ; $815c: ad 3f 07  
-            sta $2005          ; $815f: 8d 05 20  
-            lda $0740          ; $8162: ad 40 07  
-            sta $2005          ; $8165: 8d 05 20  
-            lda $0778          ; $8168: ad 78 07  
+	; this something is reset on reset
+	; so yeah, first restore the scrolling
+	; so yeah, , after waiting for the top of the screen to be drawn
+	; then set the scroll, so the rest of the screen will scroll!
+	; oh its the scroll
+@skip6:     lda ppu_scroll_mirror_x          ; $815c: ad 3f 07  
+	; but whatever it is, is stored in scroll.
+	; oh, so it must be scroll mirro
+            sta ppu_scroll          ; $815f: 8d 05 20  
+            lda ppu_scroll_mirror_y          ; $8162: ad 40 07  
+            sta ppu_scroll; $8165: 8d 05 20  
+
+	; and grab the ppu ctrl mirro and restor that
+            lda ppu_ctrl_mirror          ; $8168: ad 78 07  
             pha                ; $816b: 48        
-            sta $2000          ; $816c: 8d 00 20  
-            lda $0776          ; $816f: ad 76 07  
+            sta ppu_ctrl          ; $816c: 8d 00 20  
+
+	; and then calling this mysterious subroutine
+	; optionally
+	; depending on the 1st bit
+	; if its 0
+            lda addr19          ; $816f: ad 76 07  
             lsr                ; $8172: 4a        
             bcs @skip7         ; $8173: b0 03     
-            jsr __8212         ; $8175: 20 12 82  
-@skip7:     lda $2002          ; $8178: ad 02 20  
+            jsr subroutine11         ; $8175: 20 12 82  
+
+	; and then reseting the addres latch?
+@skip7:     lda ppu_status          ; $8178: ad 02 20  
+	; and restoring the ppu control once again
+	; this time forcing nmi to be enabled
             pla                ; $817b: 68        
             ora #$80           ; $817c: 09 80     
-            sta $2000          ; $817e: 8d 00 20  
+            sta ppu_ctrl          ; $817e: 8d 00 20  
             rti                ; $8181: 40        
 
 ;-------------------------------------------------------------------------------
@@ -464,31 +487,36 @@ handle_pause:
 @ret:       rts                ; $81c5: 60        
 
 ;-------------------------------------------------------------------------------
-__81c6:     ldy $074e          ; $81c6: ac 4e 07  
+; without this subroutine, 
+; the game freezes when mario hits a coin block
+subroutine10:
+            ldy $074e          ; $81c6: ac 4e 07  
             lda #$28           ; $81c9: a9 28     
             sta $00            ; $81cb: 85 00     
             ldx #$0e           ; $81cd: a2 0e     
-__81cf:     lda $06e4,x        ; $81cf: bd e4 06  
+@loop:      lda $06e4,x        ; $81cf: bd e4 06  
             cmp $00            ; $81d2: c5 00     
-            bcc __81e5         ; $81d4: 90 0f     
+            bcc @skip          ; $81d4: 90 0f     
             ldy $06e0          ; $81d6: ac e0 06  
             clc                ; $81d9: 18        
             adc $06e1,y        ; $81da: 79 e1 06  
-            bcc __81e2         ; $81dd: 90 03     
+            bcc @skip2         ; $81dd: 90 03     
             clc                ; $81df: 18        
             adc $00            ; $81e0: 65 00     
-__81e2:     sta $06e4,x        ; $81e2: 9d e4 06  
-__81e5:     dex                ; $81e5: ca        
-            bpl __81cf         ; $81e6: 10 e7     
+@skip2:     sta $06e4,x        ; $81e2: 9d e4 06  
+@skip:      dex                ; $81e5: ca        
+            bpl @loop          ; $81e6: 10 e7     
+
             ldx $06e0          ; $81e8: ae e0 06  
             inx                ; $81eb: e8        
             cpx #$03           ; $81ec: e0 03     
-            bne __81f2         ; $81ee: d0 02     
+            bne @skip3         ; $81ee: d0 02     
             ldx #$00           ; $81f0: a2 00     
-__81f2:     stx $06e0          ; $81f2: 8e e0 06  
+
+@skip3:     stx $06e0          ; $81f2: 8e e0 06  
             ldx #$08           ; $81f5: a2 08     
             ldy #$02           ; $81f7: a0 02     
-__81f9:     lda $06e9,y        ; $81f9: b9 e9 06  
+@loop2:     lda $06e9,y        ; $81f9: b9 e9 06  
             sta $06f1,x        ; $81fc: 9d f1 06  
             clc                ; $81ff: 18        
             adc #$08           ; $8200: 69 08     
@@ -500,12 +528,13 @@ __81f9:     lda $06e9,y        ; $81f9: b9 e9 06
             dex                ; $820c: ca        
             dex                ; $820d: ca        
             dey                ; $820e: 88        
-            bpl __81f9         ; $820f: 10 e8     
+            bpl @loop2         ; $820f: 10 e8     
             rts                ; $8211: 60        
 
 ;-------------------------------------------------------------------------------
-__8212:     lda $0770          ; $8212: ad 70 07  
-            jsr __8e04         ; $8215: 20 04 8e  
+subroutine11:
+            lda $0770          ; $8212: ad 70 07  
+            jsr subroutine12         ; $8215: 20 04 8e  
             and ($82),y        ; $8218: 31 82     
             .hex dc ae 8b      ; $821a: dc ae 8b  Invalid Opcode - NOP __8bae,x
             .hex 83 18         ; $821d: 83 18     Invalid Opcode - SAX ($18,x)
@@ -554,7 +583,7 @@ hide_4_sprites:     ldy #$04           ; $8223: a0 04
 
 ;-------------------------------------------------------------------------------
             lda $0772          ; $8231: ad 72 07  
-__8234:     jsr __8e04         ; $8234: 20 04 8e  
+__8234:     jsr subroutine12         ; $8234: 20 04 8e  
             .hex cf 8f 67      ; $8237: cf 8f 67  Invalid Opcode - DCP $678f
             sta $61            ; $823a: 85 61     
             bcc __8283         ; $823c: 90 45     
@@ -737,7 +766,7 @@ __839a:     jsr __f131         ; $839a: 20 31 f1
 
 ;-------------------------------------------------------------------------------
 __83a0:     lda $0772          ; $83a0: ad 72 07  
-            jsr __8e04         ; $83a3: 20 04 8e  
+            jsr subroutine12         ; $83a3: 20 04 8e  
             ldy $cf,x          ; $83a6: b4 cf     
             bcs __832d         ; $83a8: b0 83     
             lda __f683,x       ; $83aa: bd 83 f6  
@@ -966,7 +995,7 @@ __854b:     lda #$02           ; $854b: a9 02
 
 ;-------------------------------------------------------------------------------
             lda $073c          ; $8567: ad 3c 07  
-            jsr __8e04         ; $856a: 20 04 8e  
+            jsr subroutine12         ; $856a: 20 04 8e  
             .hex 8b 85         ; $856d: 8b 85     Invalid Opcode - XAA #$85
             .hex 9b            ; $856f: 9b        Invalid Opcode - TAS 
             sta $52            ; $8570: 85 52     
@@ -2089,7 +2118,11 @@ __8dd9:     asl $1d1c          ; $8dd9: 0e 1c 1d
             clc                ; $8dff: 18        
             .hex 1b 15 0d      ; $8e00: 1b 15 0d  Invalid Opcode - SLO $0d15,y
             brk                ; $8e03: 00        
-__8e04:     asl                ; $8e04: 0a        
+
+; whatever this is, its called an awful lot
+; with a as an argument
+subroutine12:
+            asl                ; $8e04: 0a        
             tay                ; $8e05: a8        
             pla                ; $8e06: 68        
             sta $04            ; $8e07: 85 04     
@@ -2203,8 +2236,8 @@ __8e2d:     sta ppu_addr       ; $8e2d: 8d 06 20
 	; and then store a (0) in these places
 	; unsure what they are
 	; but resetting them whatever they are
-            sta addr08         ; $8e53: 8d 3f 07  
-            sta addr09         ; $8e56: 8d 40 07  
+            sta ppu_scroll_mirror_x         ; $8e53: 8d 3f 07  
+            sta ppu_scroll_mirror_y         ; $8e56: 8d 40 07  
 
 	; and continue the subroutine elsewhere
 	; aka, reset the scrolling, and return
@@ -2895,7 +2928,7 @@ __920f:     sta $075b          ; $920f: 8d 5b 07
 
 ;-------------------------------------------------------------------------------
             lda $0772          ; $9218: ad 72 07  
-            jsr __8e04         ; $921b: 20 04 8e  
+            jsr subroutine12         ; $921b: 20 04 8e  
             bit $92            ; $921e: 24 92     
             .hex 67 85         ; $9220: 67 85     Invalid Opcode - RRA $85
             .hex 37 92         ; $9222: 37 92     Invalid Opcode - RLA $92,x
@@ -2983,7 +3016,7 @@ __92ba:     dey                ; $92ba: 88
 __92c7:     rts                ; $92c7: 60        
 
 ;-------------------------------------------------------------------------------
-__92c8:     jsr __8e04         ; $92c8: 20 04 8e  
+__92c8:     jsr subroutine12         ; $92c8: 20 04 8e  
             .hex db 92 ae      ; $92cb: db 92 ae  Invalid Opcode - DCP __ae92,y
             dey                ; $92ce: 88        
             ldx __fc88         ; $92cf: ae 88 fc  
@@ -3506,7 +3539,7 @@ __9646:     ldy $072c          ; $9646: ac 2c 07
 __965f:     lda $00            ; $965f: a5 00     
             clc                ; $9661: 18        
             adc $07            ; $9662: 65 07     
-            jsr __8e04         ; $9664: 20 04 8e  
+            jsr subroutine12         ; $9664: 20 04 8e  
             sbc $98            ; $9667: e5 98     
             rti                ; $9669: 40        
 
@@ -3631,7 +3664,7 @@ __973c:     sta $06cd          ; $973c: 8d cd 06
 
 ;-------------------------------------------------------------------------------
             lda $0733          ; $9740: ad 33 07  
-            jsr __8e04         ; $9743: 20 04 8e  
+            jsr subroutine12         ; $9743: 20 04 8e  
             jmp $7897          ; $9746: 4c 97 78  
 
 ;-------------------------------------------------------------------------------
@@ -7010,7 +7043,7 @@ __b049:     rts                ; $b049: 60
 
 ;-------------------------------------------------------------------------------
 __b04a:     lda $0e            ; $b04a: a5 0e     
-            jsr __8e04         ; $b04c: 20 04 8e  
+            jsr subroutine12         ; $b04c: 20 04 8e  
             and ($91),y        ; $b04f: 31 91     
             .hex c7 b1         ; $b051: c7 b1     Invalid Opcode - DCP $b1
             asl $b2            ; $b053: 06 b2     
@@ -7409,7 +7442,7 @@ __b33b:     jsr __b450         ; $b33b: 20 50 b4
             beq __b34e         ; $b347: f0 05     
             ldy #$18           ; $b349: a0 18     
             sty $0789          ; $b34b: 8c 89 07  
-__b34e:     jsr __8e04         ; $b34e: 20 04 8e  
+__b34e:     jsr subroutine12         ; $b34e: 20 04 8e  
             .hex 5a            ; $b351: 5a        Invalid Opcode - NOP 
             .hex b3 76         ; $b352: b3 76     Invalid Opcode - LAX ($76),y
             .hex b3 6d         ; $b354: b3 6d     Invalid Opcode - LAX ($6d),y
@@ -9438,7 +9471,7 @@ __c272:     lda $16,x          ; $c272: b5 16
             lda #$01           ; $c27f: a9 01     
             sta $03d8,x        ; $c281: 9d d8 03  
             tya                ; $c284: 98        
-__c285:     jsr __8e04         ; $c285: 20 04 8e  
+__c285:     jsr subroutine12         ; $c285: 20 04 8e  
             .hex 14 c3         ; $c288: 14 c3     Invalid Opcode - NOP $c3,x
             .hex 14 c3         ; $c28a: 14 c3     Invalid Opcode - NOP $c3,x
             .hex 14 c3         ; $c28c: 14 c3     Invalid Opcode - NOP $c3,x
@@ -10158,7 +10191,7 @@ __c78a:     jmp __c264         ; $c78a: 4c 64 c2
             sta $06cb          ; $c7a8: 8d cb 06  
             sec                ; $c7ab: 38        
             sbc #$12           ; $c7ac: e9 12     
-            jsr __8e04         ; $c7ae: 20 04 8e  
+            jsr subroutine12         ; $c7ae: 20 04 8e  
             tax                ; $c7b1: aa        
             .hex c3 bd         ; $c7b2: c3 bd     Invalid Opcode - DCP ($bd,x)
             .hex c7 ae         ; $c7b4: c7 ae     Invalid Opcode - DCP $ae
@@ -10292,7 +10325,7 @@ __c888:     ldx $08            ; $c888: a6 08
             bcc __c895         ; $c890: 90 03     
             tya                ; $c892: 98        
             sbc #$14           ; $c893: e9 14     
-__c895:     jsr __8e04         ; $c895: 20 04 8e  
+__c895:     jsr subroutine12         ; $c895: 20 04 8e  
             inc $c8            ; $c898: e6 c8     
             .hex 3b c9 5d      ; $c89a: 3b c9 5d  Invalid Opcode - RLA $5dc9,y
             .hex d2            ; $c89d: d2        Invalid Opcode - KIL 
@@ -10353,7 +10386,7 @@ __c906:     .hex 0b c9         ; $c906: 0b c9     Invalid Opcode - ANC #$c9
 
 ;-------------------------------------------------------------------------------
             lda $16,x          ; $c90b: b5 16     
-            jsr __8e04         ; $c90d: 20 04 8e  
+            jsr subroutine12         ; $c90d: 20 04 8e  
             adc $7dca,x        ; $c910: 7d ca 7d  
             dex                ; $c913: ca        
             adc $7dca,x        ; $c914: 7d ca 7d  
@@ -10416,7 +10449,7 @@ __c97f:     jsr __f159         ; $c97f: 20 59 f1
 __c988:     lda $16,x          ; $c988: b5 16     
             sec                ; $c98a: 38        
             sbc #$24           ; $c98b: e9 24     
-            jsr __8e04         ; $c98d: 20 04 8e  
+            jsr subroutine12         ; $c98d: 20 04 8e  
             .hex fa            ; $c990: fa        Invalid Opcode - NOP 
             .hex d3 9b         ; $c991: d3 9b     Invalid Opcode - DCP ($9b),y
             cmp $17,x          ; $c993: d5 17     
@@ -11671,7 +11704,7 @@ __d29d:     .hex 54 55         ; $d29d: 54 55     Invalid Opcode - NOP $55,x
             lda $0746          ; $d2a6: ad 46 07  
             cmp #$05           ; $d2a9: c9 05     
             bcs __d2d9         ; $d2ab: b0 2c     
-            jsr __8e04         ; $d2ad: 20 04 8e  
+            jsr subroutine12         ; $d2ad: 20 04 8e  
             cmp __bad2,y       ; $d2b0: d9 d2 ba  
             .hex d2            ; $d2b3: d2        Invalid Opcode - KIL 
             .hex da            ; $d2b4: da        Invalid Opcode - NOP 
