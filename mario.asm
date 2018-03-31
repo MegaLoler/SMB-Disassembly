@@ -435,6 +435,7 @@ __80a9:     lda #$00           ; $80a9: a9 00
             pla                ; $817b: 68        
             ora #$80           ; $817c: 09 80     
             sta ppu_ctrl          ; $817e: 8d 00 20  
+	; and done with nmi!
             rti                ; $8181: 40        
 
 ;-------------------------------------------------------------------------------
@@ -532,13 +533,21 @@ subroutine10:
             rts                ; $8211: 60        
 
 ;-------------------------------------------------------------------------------
+; some very important subroutine!
+; seems to handle the Rest of the game!
+; the gateway to the rest of the game logic, it seems
+; so im guessing, depending on some state of the game
+; it jumps to some handler for that state of the game
 subroutine11:
-            lda $0770          ; $8212: ad 70 07  
-            jsr subroutine12         ; $8215: 20 04 8e  
-            and ($82),y        ; $8218: 31 82     
-            .hex dc ae 8b      ; $821a: dc ae 8b  Invalid Opcode - NOP __8bae,x
-            .hex 83 18         ; $821d: 83 18     Invalid Opcode - SAX ($18,x)
-            .hex 92            ; $821f: 92        Invalid Opcode - KIL 
+	; grab the apu status 
+	; is that really what this is? lol
+            lda apu_status_mirror          ; $8212: ad 70 07  
+            jsr jmp_from_table         ; $8215: 20 04 8e  
+; so this in front is data...
+; and we'r just selecting one of these
+; depending on apu status mirror?
+; these are 16 bit addresses...
+            .dw jmp_vector01, jmp_vector08, jmp_vector02, jmp_vector03
 
 ; here's a subroutine
 ; looks like it initializes oam
@@ -582,27 +591,35 @@ hide_4_sprites:     ldy #$04           ; $8223: a0 04
             rts                ; $8230: 60        
 
 ;-------------------------------------------------------------------------------
-            lda $0772          ; $8231: ad 72 07  
-__8234:     jsr subroutine12         ; $8234: 20 04 8e  
-            .hex cf 8f 67      ; $8237: cf 8f 67  Invalid Opcode - DCP $678f
-            sta $61            ; $823a: 85 61     
-            bcc __8283         ; $823c: 90 45     
-            .hex 82            ; $823e: 82        Suspected data
+; this im guessing is one handler for one state of the game
+jmp_vector01:
+            lda addr17          ; $8231: ad 72 07  
+	; so here we're jumpin from another table
+	; but i'm not sure how long it is
+	; i dont know when this table ends
+__8234:     jsr jmp_from_table         ; $8234: 20 04 8e  
+	; table
+            .dw jmp_vector04, jmp_vector05, jmp_vector06, jmp_vector07 
+
+	; unsure if these are part of the table too or not?
 __823f:     .hex 04 20         ; $823f: 04 20     Invalid Opcode - NOP $20
             .hex 73 01         ; $8241: 73 01     Invalid Opcode - RRA ($01),y
             brk                ; $8243: 00        
             brk                ; $8244: 00        
+
+; whats this do
+jmp_vector07:
             ldy #$00           ; $8245: a0 00     
             lda $06fc          ; $8247: ad fc 06  
             ora $06fd          ; $824a: 0d fd 06  
             cmp #$10           ; $824d: c9 10     
-            beq __8255         ; $824f: f0 04     
+            beq @skip         ; $824f: f0 04     
             cmp #$90           ; $8251: c9 90     
-            bne __8258         ; $8253: d0 03     
-__8255:     jmp __82d8         ; $8255: 4c d8 82  
-
-;-------------------------------------------------------------------------------
-__8258:     cmp #$20           ; $8258: c9 20     
+            bne @skip2         ; $8253: d0 03     
+; if its 10 or 90
+@skip:      jmp __82d8         ; $8255: 4c d8 82  
+; if its anything else
+@skip2:     cmp #$20           ; $8258: c9 20     
             beq __8276         ; $825a: f0 1a     
             ldx $07a2          ; $825c: ae a2 07  
             bne __826c         ; $825f: d0 0b     
@@ -610,13 +627,13 @@ __8258:     cmp #$20           ; $8258: c9 20
             jsr __836b         ; $8264: 20 6b 83  
             bcs __82c9         ; $8267: b0 60     
             jmp __82c0         ; $8269: 4c c0 82  
-
-;-------------------------------------------------------------------------------
+; if whatevers in 07a2h
 __826c:     ldx $07fc          ; $826c: ae fc 07  
             beq __82bb         ; $826f: f0 4a     
             cmp #$40           ; $8271: c9 40     
             bne __82bb         ; $8273: d0 46     
             iny                ; $8275: c8        
+; if its 20
 __8276:     lda $07a2          ; $8276: ad a2 07  
             beq __82c9         ; $8279: f0 4e     
             lda #$18           ; $827b: a9 18     
@@ -650,7 +667,7 @@ __82a9:     lda __823f,x       ; $82a9: bd 3f 82
             sty $0304          ; $82b8: 8c 04 03  
 __82bb:     lda #$00           ; $82bb: a9 00     
             sta $06fc          ; $82bd: 8d fc 06  
-__82c0:     jsr __aeea         ; $82c0: 20 ea ae  
+__82c0:     jsr jmp_vector11         ; $82c0: 20 ea ae  
             lda $0e            ; $82c3: a5 0e     
             cmp #$06           ; $82c5: c9 06     
             bne __830d         ; $82c7: d0 44     
@@ -669,7 +686,7 @@ __82d8:     ldy $07a2          ; $82d8: ac a2 07
             lda $07fd          ; $82e0: ad fd 07  
             .hex 20 0e         ; $82e3: 20 0e     Suspected data
 __82e5:     .hex 83            ; $82e5: 83        Suspected data
-__82e6:     jsr __9c03         ; $82e6: 20 03 9c  
+__82e6:     jsr subroutine13         ; $82e6: 20 03 9c  
             inc $075d          ; $82e9: ee 5d 07  
             inc $0764          ; $82ec: ee 64 07  
             inc $0757          ; $82ef: ee 57 07  
@@ -755,6 +772,7 @@ __8383:     sta $06fc          ; $8383: 8d fc 06
 __838a:     rts                ; $838a: 60        
 
 ;-------------------------------------------------------------------------------
+jmp_vector02:
             jsr __83a0         ; $838b: 20 a0 83  
             lda $0772          ; $838e: ad 72 07  
             beq __839a         ; $8391: f0 07     
@@ -765,8 +783,8 @@ __839a:     jsr __f131         ; $839a: 20 31 f1
             jmp __eef0         ; $839d: 4c f0 ee  
 
 ;-------------------------------------------------------------------------------
-__83a0:     lda $0772          ; $83a0: ad 72 07  
-            jsr subroutine12         ; $83a3: 20 04 8e  
+__83a0:     lda addr17          ; $83a0: ad 72 07  
+            jsr jmp_from_table         ; $83a3: 20 04 8e  
             ldy $cf,x          ; $83a6: b4 cf     
             bcs __832d         ; $83a8: b0 83     
             lda __f683,x       ; $83aa: bd 83 f6  
@@ -875,7 +893,7 @@ __8460:     rts                ; $8460: 60
             sta $075c          ; $8472: 8d 5c 07  
             sta $0772          ; $8475: 8d 72 07  
             inc $075f          ; $8478: ee 5f 07  
-            jsr __9c03         ; $847b: 20 03 9c  
+            jsr subroutine13         ; $847b: 20 03 9c  
             inc $0757          ; $847e: ee 57 07  
             .hex a9            ; $8481: a9        Suspected data
 __8482:     ora ($8d,x)        ; $8482: 01 8d     
@@ -994,8 +1012,9 @@ __854b:     lda #$02           ; $854b: a9 02
             rts                ; $8566: 60        
 
 ;-------------------------------------------------------------------------------
+jmp_vector05:
             lda $073c          ; $8567: ad 3c 07  
-            jsr subroutine12         ; $856a: 20 04 8e  
+            jsr jmp_from_table ; $856a: 20 04 8e  
             .hex 8b 85         ; $856d: 8b 85     Invalid Opcode - XAA #$85
             .hex 9b            ; $856f: 9b        Invalid Opcode - TAS 
             sta $52            ; $8570: 85 52     
@@ -2121,20 +2140,42 @@ __8dd9:     asl $1d1c          ; $8dd9: 0e 1c 1d
 
 ; whatever this is, its called an awful lot
 ; with a as an argument
-subroutine12:
+; in nmi, its called (by subroutine11)
+; with apu status mirror on a
+; so which channels are enabled?
+; oh, redaing it reads the frame counter?
+; whether its grater than 0?
+; so... ultimately.....
+; this routine... selects an address to jump to.. from a table..
+; in front of the return address, where this was called
+; offset by some value...
+jmp_from_table:
+	; double it?
+	; yeah because its an offset of a 16bit array (of addresses)
             asl                ; $8e04: 0a        
+	; put it on y?
             tay                ; $8e05: a8        
+	; pull from the stack?
+	; but the value on the stack, is the return address!!
+	; where this routine was called
+	; so storing the return address at zp 04
             pla                ; $8e06: 68        
-            sta $04            ; $8e07: 85 04     
+            sta zp06            ; $8e07: 85 04     
             pla                ; $8e09: 68        
-            sta $05            ; $8e0a: 85 05     
+            sta zp07            ; $8e0a: 85 05     
+	; then increment the argument
+	; and load a value offset from that
             iny                ; $8e0c: c8        
-            lda ($04),y        ; $8e0d: b1 04     
-            sta $06            ; $8e0f: 85 06     
+	; so... grabbing a value offset from the return address
+	;.. depending on the frame counter???
+	; 16 bit value and storing it on zp01
+	; and then jumping there...
+            lda (zp06),y        ; $8e0d: b1 04     
+            sta zp01            ; $8e0f: 85 06     
             iny                ; $8e11: c8        
-            lda ($04),y        ; $8e12: b1 04     
-            sta $07            ; $8e14: 85 07     
-            jmp ($0006)        ; $8e16: 6c 06 00  
+            lda (zp06),y        ; $8e12: b1 04     
+            sta zp02            ; $8e14: 85 07     
+            jmp (zp01)        ; $8e16: 6c 06 00  
 
 ;-------------------------------------------------------------------------------
 ; a subroutine
@@ -2612,35 +2653,65 @@ __8fbc:     .hex 04 30         ; $8fbc: 04 30     Invalid Opcode - NOP $30
             .hex fc 28 2c      ; $8fc8: fc 28 2c  Invalid Opcode - NOP $2c28,x
 __8fcb:     clc                ; $8fcb: 18        
             .hex ff 23 58      ; $8fcc: ff 23 58  Invalid Opcode - ISC $5823,x
+
+; okay im guessing this is some handler for some state of the game
+; this probably is preparing for the title screen
+; because its initing ram, EXCEPT for the top
+; which is where the score is stored, somewhere
+jmp_vector04:
+	; so clearing ram downward starting from $76f?
             ldy #$6f           ; $8fcf: a0 6f     
             jsr init_ram       ; $8fd1: 20 cc 90  
+	; then copy A to 1f? or 20? values starting at addr26
             ldy #$1f           ; $8fd4: a0 1f     
-__8fd6:     sta $07b0,y        ; $8fd6: 99 b0 07  
+@loop:      sta addr26,y        ; $8fd6: 99 b0 07  
             dey                ; $8fd9: 88        
-            bpl __8fd6         ; $8fda: 10 fa     
+            bpl @loop         ; $8fda: 10 fa     
+
+	; copy this value to some var
             lda #$18           ; $8fdc: a9 18     
-            sta $07a2          ; $8fde: 8d a2 07  
-            jsr __9c03         ; $8fe1: 20 03 9c  
+            sta addr27          ; $8fde: 8d a2 07  
+	; and go to some subroutine!
+	; which stores some value somewhere from some table?
+	; i wonder.... is it just grabbing high score?
+	; uh.. idk probably not
+            jsr subroutine13         ; $8fe1: 20 03 9c  
+
+	; then
+	; clearing ram downward starting from $74b?
+jmp_vector09:
             ldy #$4b           ; $8fe4: a0 4b     
             jsr init_ram       ; $8fe6: 20 cc 90  
+	; loop $21 times
+	; clearing values from $780 up
+	; which i think is an array of some kind of counters?
             ldx #$21           ; $8fe9: a2 21     
             lda #$00           ; $8feb: a9 00     
-__8fed:     sta $0780,x        ; $8fed: 9d 80 07  
+@loop2:     sta addr23,x        ; $8fed: 9d 80 07  
             dex                ; $8ff0: ca        
-            bpl __8fed         ; $8ff1: 10 fa     
-            lda $075b          ; $8ff3: ad 5b 07  
-            ldy $0752          ; $8ff6: ac 52 07  
-            beq __8ffe         ; $8ff9: f0 03     
-            lda $0751          ; $8ffb: ad 51 07  
-__8ffe:     sta $071a          ; $8ffe: 8d 1a 07  
-            sta $0725          ; $9001: 8d 25 07  
-            sta $0728          ; $9004: 8d 28 07  
-            jsr __b038         ; $9007: 20 38 b0  
+            bpl @loop2         ; $8ff1: 10 fa     
+
+	; grab addr32 unless val at addr32 in which case grab addr34 instead
+            lda addr32          ; $8ff3: ad 5b 07  
+            ldy addr33          ; $8ff6: ac 52 07  
+            beq @skip         ; $8ff9: f0 03     
+            lda addr34          ; $8ffb: ad 51 07  
+	; and put it here
+	; in these three places
+@skip:      sta addr35          ; $8ffe: 8d 1a 07  
+            sta addr36          ; $9001: 8d 25 07  
+            sta addr37          ; $9004: 8d 28 07  
+
+	; and then call this
+	; dunno what it does
+            jsr subroutine16         ; $9007: 20 38 b0  
+
+	; 
             ldy #$20           ; $900a: a0 20     
             and #$01           ; $900c: 29 01     
-            beq __9012         ; $900e: f0 02     
+            beq @skip2         ; $900e: f0 02     
             ldy #$24           ; $9010: a0 24     
-__9012:     sty $0720          ; $9012: 8c 20 07  
+@skip2:     sty $0720          ; $9012: 8c 20 07  
             ldy #$80           ; $9015: a0 80     
             sty $0721          ; $9017: 8c 21 07  
             asl                ; $901a: 0a        
@@ -2655,20 +2726,20 @@ __9012:     sty $0720          ; $9012: 8c 20 07
             sta $071e          ; $902c: 8d 1e 07  
             jsr __9c22         ; $902f: 20 22 9c  
             lda $076a          ; $9032: ad 6a 07  
-            bne __9047         ; $9035: d0 10     
+            bne @skip3         ; $9035: d0 10     
             lda $075f          ; $9037: ad 5f 07  
             cmp #$04           ; $903a: c9 04     
-            bcc __904a         ; $903c: 90 0c     
-            bne __9047         ; $903e: d0 07     
+            bcc @skip4         ; $903c: 90 0c     
+            bne @skip3         ; $903e: d0 07     
             lda $075c          ; $9040: ad 5c 07  
             cmp #$02           ; $9043: c9 02     
-            bcc __904a         ; $9045: 90 03     
-__9047:     inc $06cc          ; $9047: ee cc 06  
-__904a:     lda $075b          ; $904a: ad 5b 07  
-            beq __9054         ; $904d: f0 05     
+            bcc @skip4         ; $9045: 90 03     
+@skip3:     inc $06cc          ; $9047: ee cc 06  
+@skip4:     lda $075b          ; $904a: ad 5b 07  
+            beq @skip5         ; $904d: f0 05     
             lda #$02           ; $904f: a9 02     
             sta $0710          ; $9051: 8d 10 07  
-__9054:     lda #$80           ; $9054: a9 80     
+@skip5:     lda #$80           ; $9054: a9 80     
             sta $fb            ; $9056: 85 fb     
             lda #$01           ; $9058: a9 01     
             sta $0774          ; $905a: 8d 74 07  
@@ -2676,12 +2747,14 @@ __9054:     lda #$80           ; $9054: a9 80
             rts                ; $9060: 60        
 
 ;-------------------------------------------------------------------------------
+jmp_vector06:
             lda #$01           ; $9061: a9 01     
             sta $0757          ; $9063: 8d 57 07  
             sta $0754          ; $9066: 8d 54 07  
             lda #$02           ; $9069: a9 02     
             sta $075a          ; $906b: 8d 5a 07  
             sta $0761          ; $906e: 8d 61 07  
+jmp_vector10:
             lda #$00           ; $9071: a9 00     
             sta $0774          ; $9073: 8d 74 07  
             tay                ; $9076: a8        
@@ -2927,8 +3000,9 @@ __920f:     sta $075b          ; $920f: 8d 5b 07
             jmp __9264         ; $9215: 4c 64 92  
 
 ;-------------------------------------------------------------------------------
+jmp_vector03:
             lda $0772          ; $9218: ad 72 07  
-            jsr subroutine12         ; $921b: 20 04 8e  
+            jsr jmp_from_table         ; $921b: 20 04 8e  
             bit $92            ; $921e: 24 92     
             .hex 67 85         ; $9220: 67 85     Invalid Opcode - RRA $85
             .hex 37 92         ; $9222: 37 92     Invalid Opcode - RLA $92,x
@@ -2963,7 +3037,7 @@ __9248:     lda #$80           ; $9248: a9 80
             rts                ; $9263: 60        
 
 ;-------------------------------------------------------------------------------
-__9264:     jsr __9c03         ; $9264: 20 03 9c  
+__9264:     jsr subroutine13         ; $9264: 20 03 9c  
             lda #$01           ; $9267: a9 01     
             sta $0754          ; $9269: 8d 54 07  
             inc $0757          ; $926c: ee 57 07  
@@ -3016,7 +3090,7 @@ __92ba:     dey                ; $92ba: 88
 __92c7:     rts                ; $92c7: 60        
 
 ;-------------------------------------------------------------------------------
-__92c8:     jsr subroutine12         ; $92c8: 20 04 8e  
+__92c8:     jsr jmp_from_table         ; $92c8: 20 04 8e  
             .hex db 92 ae      ; $92cb: db 92 ae  Invalid Opcode - DCP __ae92,y
             dey                ; $92ce: 88        
             ldx __fc88         ; $92cf: ae 88 fc  
@@ -3539,7 +3613,7 @@ __9646:     ldy $072c          ; $9646: ac 2c 07
 __965f:     lda $00            ; $965f: a5 00     
             clc                ; $9661: 18        
             adc $07            ; $9662: 65 07     
-            jsr subroutine12         ; $9664: 20 04 8e  
+            jsr jmp_from_table         ; $9664: 20 04 8e  
             sbc $98            ; $9667: e5 98     
             rti                ; $9669: 40        
 
@@ -3664,7 +3738,7 @@ __973c:     sta $06cd          ; $973c: 8d cd 06
 
 ;-------------------------------------------------------------------------------
             lda $0733          ; $9740: ad 33 07  
-            jsr subroutine12         ; $9743: 20 04 8e  
+            jsr jmp_from_table         ; $9743: 20 04 8e  
             jmp $7897          ; $9746: 4c 97 78  
 
 ;-------------------------------------------------------------------------------
@@ -4345,23 +4419,43 @@ __9bf8:     .hex 12            ; $9bf8: 12        Invalid Opcode - KIL
 __9bff:     .hex 32            ; $9bff: 32        Invalid Opcode - KIL 
 __9c00:     asl                ; $9c00: 0a        
             rol $40            ; $9c01: 26 40     
-__9c03:     jsr __9c13         ; $9c03: 20 13 9c  
-            sta $0750          ; $9c06: 8d 50 07  
+
+; some routine
+; not sure what it does
+; stores some value from a table 
+subroutine13:
+	; first do this thing
+	; which returns some value to a
+	; from table04
+            jsr subroutine14         ; $9c03: 20 13 9c  
+	; which is then stored here
+            sta addr28          ; $9c06: 8d 50 07  
+	; masked
 __9c09:     and #$60           ; $9c09: 29 60     
+	; and uh, multiplied by 16?
             asl                ; $9c0b: 0a        
             rol                ; $9c0c: 2a        
             rol                ; $9c0d: 2a        
             rol                ; $9c0e: 2a        
-            sta $074e          ; $9c0f: 8d 4e 07  
+	; then stored here
+            sta addr29          ; $9c0f: 8d 4e 07  
             rts                ; $9c12: 60        
 
 ;-------------------------------------------------------------------------------
-__9c13:     ldy $075f          ; $9c13: ac 5f 07  
-            lda __9cb4,y       ; $9c16: b9 b4 9c  
+; returns some value on A from table04
+; as indexed by a value on table03
+subroutine14:
+	; grab an indexd from this place
+            ldy $075f          ; $9c13: ac 5f 07  
+	; get the corresponding value from rom table here
+            lda table03,y       ; $9c16: b9 b4 9c  
+	; and add it to some value in ram
             clc                ; $9c19: 18        
             adc $0760          ; $9c1a: 6d 60 07  
+	; in order to get a new index
             tay                ; $9c1d: a8        
-            lda __9cbc,y       ; $9c1e: b9 bc 9c  
+	; and grab the value in that table
+            lda table04,y       ; $9c1e: b9 bc 9c  
             rts                ; $9c21: 60        
 
 ;-------------------------------------------------------------------------------
@@ -4446,17 +4540,15 @@ __9ca3:     sta $0733          ; $9ca3: 8d 33 07
             rts                ; $9cb3: 60        
 
 ;-------------------------------------------------------------------------------
-__9cb4:     brk                ; $9cb4: 00        
-            ora $0a            ; $9cb5: 05 0a     
-            asl $1713          ; $9cb7: 0e 13 17  
-            .hex 1b 20         ; $9cba: 1b 20     Suspected data
-__9cbc:     and $29            ; $9cbc: 25 29     
-            cpy #$26           ; $9cbe: c0 26     
-            rts                ; $9cc0: 60        
+; this is some table o some kind
+table03:
+            .hex 00 05 0a 0e 13 17 1b 20
+; so is this
+; not sure when it ends
+; but its probably a lot longer
+table04:
+            .hex 25 29 c0 26 60 28 29 01
 
-;-------------------------------------------------------------------------------
-            plp                ; $9cc1: 28        
-            and #$01           ; $9cc2: 29 01     
             .hex 27 62         ; $9cc4: 27 62     Invalid Opcode - RLA $62
             .hex 24            ; $9cc6: 24        Suspected data
 __9cc7:     and $20,x          ; $9cc7: 35 20     
@@ -6821,7 +6913,7 @@ __ae5b:     asl $64,x          ; $ae5b: 16 64
             .hex 87 53         ; $ae7d: 87 53     Invalid Opcode - SAX $53
             .hex 17 e3         ; $ae7f: 17 e3     Invalid Opcode - SLO $e3,x
             and #$61           ; $ae81: 29 61     
-            bmi __aee7         ; $ae83: 30 62     
+            bmi $aee7         ; $ae83: 30 62     
             .hex 3c 08 42      ; $ae85: 3c 08 42  Invalid Opcode - NOP $4208,x
 __ae88:     .hex 37 59         ; $ae88: 37 59     Invalid Opcode - RLA $59,x
             rti                ; $ae8a: 40        
@@ -6868,15 +6960,19 @@ __aec2:     asl $3901,x        ; $aec2: 1e 01 39
 __aed3:     .hex 0b 3e         ; $aed3: 0b 3e     Invalid Opcode - ANC #$3e
             .hex 0f 45 09      ; $aed5: 0f 45 09  Invalid Opcode - SLO $0945
             sbc __fd47         ; $aed8: ed 47 fd  
-            .hex ff ad 72      ; $aedb: ff ad 72  Invalid Opcode - ISC $72ad,x
-            .hex 07 20         ; $aede: 07 20     Invalid Opcode - SLO $20
-            .hex 04 8e         ; $aee0: 04 8e     Invalid Opcode - NOP $8e
-            cpx $8f            ; $aee2: e4 8f     
-            .hex 67 85         ; $aee4: 67 85     Invalid Opcode - RRA $85
-            .hex 71            ; $aee6: 71        Suspected data
-__aee7:     bcc __aed3         ; $aee7: 90 ea     
-            .hex ae            ; $aee9: ae        Suspected data
-__aeea:     ldx $0753          ; $aeea: ae 53 07  
+;            .hex ff ad 72      ; $aedb: ff ad 72  Invalid Opcode - ISC $72ad,x
+            .hex ff
+; here, at aedc, is a jump vector
+; seems related to pressing start on the title screen
+jmp_vector08:
+            lda addr17
+            jsr jmp_from_table
+	; the table
+            .dw jmp_vector09, jmp_vector05, jmp_vector10, jmp_vector11
+	; you know, it seesm like all these jump tables have only four entries
+
+jmp_vector11:
+            ldx $0753          ; $aeea: ae 53 07  
             lda $06fc,x        ; $aeed: bd fc 06  
             sta $06fc          ; $aef0: 8d fc 06  
 __aef3:     jsr __b04a         ; $aef3: 20 4a b0  
@@ -6994,7 +7090,7 @@ __afc4:     tya                ; $afc4: 98
             and #$fe           ; $afe9: 29 fe     
             ora $00            ; $afeb: 05 00     
             sta $0778          ; $afed: 8d 78 07  
-            jsr __b038         ; $aff0: 20 38 b0  
+            jsr subroutine16         ; $aff0: 20 38 b0  
             lda #$08           ; $aff3: a9 08     
             sta $0795          ; $aff5: 8d 95 07  
             jmp __b000         ; $aff8: 4c 00 b0  
@@ -7032,18 +7128,28 @@ __b02e:     lda #$00           ; $b02e: a9 00
 __b034:     brk                ; $b034: 00        
             .hex 10            ; $b035: 10        Suspected data
 __b036:     ora ($02,x)        ; $b036: 01 02     
-__b038:     lda $071c          ; $b038: ad 1c 07  
+
+; subroutine
+; copyin some 16bit ram var to neighboring location?
+; and adding ff?
+; idk
+subroutine16:
+	; grab a val
+	; add $ff? or subtract 1?
+	; and store it in the nextmost place
+            lda addr39          ; $b038: ad 1c 07  
             clc                ; $b03b: 18        
             adc #$ff           ; $b03c: 69 ff     
-            sta $071d          ; $b03e: 8d 1d 07  
-            lda $071a          ; $b041: ad 1a 07  
+            sta addr40          ; $b03e: 8d 1d 07  
+	; and i suppose this is the msbyte
+            lda addr35          ; $b041: ad 1a 07  
             adc #$00           ; $b044: 69 00     
-            sta $071b          ; $b046: 8d 1b 07  
+            sta addr38          ; $b046: 8d 1b 07  
 __b049:     rts                ; $b049: 60        
 
 ;-------------------------------------------------------------------------------
 __b04a:     lda $0e            ; $b04a: a5 0e     
-            jsr subroutine12         ; $b04c: 20 04 8e  
+            jsr jmp_from_table         ; $b04c: 20 04 8e  
             and ($91),y        ; $b04f: 31 91     
             .hex c7 b1         ; $b051: c7 b1     Invalid Opcode - DCP $b1
             asl $b2            ; $b053: 06 b2     
@@ -7417,7 +7523,7 @@ __b308:     .hex 5f 07 ad      ; $b308: 5f 07 ad  Invalid Opcode - SRE __ad07,x
             bcc __b315         ; $b310: 90 03     
             inc $075d          ; $b312: ee 5d 07  
 __b315:     inc $0760          ; $b315: ee 60 07  
-            jsr __9c03         ; $b318: 20 03 9c  
+            jsr subroutine13         ; $b318: 20 03 9c  
             inc $0757          ; $b31b: ee 57 07  
             jsr __b213         ; $b31e: 20 13 b2  
             sta $075b          ; $b321: 8d 5b 07  
@@ -7442,7 +7548,7 @@ __b33b:     jsr __b450         ; $b33b: 20 50 b4
             beq __b34e         ; $b347: f0 05     
             ldy #$18           ; $b349: a0 18     
             sty $0789          ; $b34b: 8c 89 07  
-__b34e:     jsr subroutine12         ; $b34e: 20 04 8e  
+__b34e:     jsr jmp_from_table         ; $b34e: 20 04 8e  
             .hex 5a            ; $b351: 5a        Invalid Opcode - NOP 
             .hex b3 76         ; $b352: b3 76     Invalid Opcode - LAX ($76),y
             .hex b3 6d         ; $b354: b3 6d     Invalid Opcode - LAX ($6d),y
@@ -9471,7 +9577,7 @@ __c272:     lda $16,x          ; $c272: b5 16
             lda #$01           ; $c27f: a9 01     
             sta $03d8,x        ; $c281: 9d d8 03  
             tya                ; $c284: 98        
-__c285:     jsr subroutine12         ; $c285: 20 04 8e  
+__c285:     jsr jmp_from_table         ; $c285: 20 04 8e  
             .hex 14 c3         ; $c288: 14 c3     Invalid Opcode - NOP $c3,x
             .hex 14 c3         ; $c28a: 14 c3     Invalid Opcode - NOP $c3,x
             .hex 14 c3         ; $c28c: 14 c3     Invalid Opcode - NOP $c3,x
@@ -10191,7 +10297,7 @@ __c78a:     jmp __c264         ; $c78a: 4c 64 c2
             sta $06cb          ; $c7a8: 8d cb 06  
             sec                ; $c7ab: 38        
             sbc #$12           ; $c7ac: e9 12     
-            jsr subroutine12         ; $c7ae: 20 04 8e  
+            jsr jmp_from_table         ; $c7ae: 20 04 8e  
             tax                ; $c7b1: aa        
             .hex c3 bd         ; $c7b2: c3 bd     Invalid Opcode - DCP ($bd,x)
             .hex c7 ae         ; $c7b4: c7 ae     Invalid Opcode - DCP $ae
@@ -10325,7 +10431,7 @@ __c888:     ldx $08            ; $c888: a6 08
             bcc __c895         ; $c890: 90 03     
             tya                ; $c892: 98        
             sbc #$14           ; $c893: e9 14     
-__c895:     jsr subroutine12         ; $c895: 20 04 8e  
+__c895:     jsr jmp_from_table         ; $c895: 20 04 8e  
             inc $c8            ; $c898: e6 c8     
             .hex 3b c9 5d      ; $c89a: 3b c9 5d  Invalid Opcode - RLA $5dc9,y
             .hex d2            ; $c89d: d2        Invalid Opcode - KIL 
@@ -10386,7 +10492,7 @@ __c906:     .hex 0b c9         ; $c906: 0b c9     Invalid Opcode - ANC #$c9
 
 ;-------------------------------------------------------------------------------
             lda $16,x          ; $c90b: b5 16     
-            jsr subroutine12         ; $c90d: 20 04 8e  
+            jsr jmp_from_table         ; $c90d: 20 04 8e  
             adc $7dca,x        ; $c910: 7d ca 7d  
             dex                ; $c913: ca        
             adc $7dca,x        ; $c914: 7d ca 7d  
@@ -10449,7 +10555,7 @@ __c97f:     jsr __f159         ; $c97f: 20 59 f1
 __c988:     lda $16,x          ; $c988: b5 16     
             sec                ; $c98a: 38        
             sbc #$24           ; $c98b: e9 24     
-            jsr subroutine12         ; $c98d: 20 04 8e  
+            jsr jmp_from_table         ; $c98d: 20 04 8e  
             .hex fa            ; $c990: fa        Invalid Opcode - NOP 
             .hex d3 9b         ; $c991: d3 9b     Invalid Opcode - DCP ($9b),y
             cmp $17,x          ; $c993: d5 17     
@@ -11704,7 +11810,7 @@ __d29d:     .hex 54 55         ; $d29d: 54 55     Invalid Opcode - NOP $55,x
             lda $0746          ; $d2a6: ad 46 07  
             cmp #$05           ; $d2a9: c9 05     
             bcs __d2d9         ; $d2ab: b0 2c     
-            jsr subroutine12         ; $d2ad: 20 04 8e  
+	    jsr jmp_from_table         ; $d2ad: 20 04 8e  
             cmp __bad2,y       ; $d2b0: d9 d2 ba  
             .hex d2            ; $d2b3: d2        Invalid Opcode - KIL 
             .hex da            ; $d2b4: da        Invalid Opcode - NOP 
@@ -13420,8 +13526,8 @@ __df0f:     lda #$20           ; $df0f: a9 20
 __df2a:     ldy __87f2,x       ; $df2a: bc f2 87  
             dey                ; $df2d: 88        
             sty $075f          ; $df2e: 8c 5f 07  
-            ldx __9cb4,y       ; $df31: be b4 9c  
-            lda __9cbc,x       ; $df34: bd bc 9c  
+            ldx table03,y       ; $df31: be b4 9c  
+            lda table04,x       ; $df34: bd bc 9c  
             sta $0750          ; $df37: 8d 50 07  
             lda #$80           ; $df3a: a9 80     
             sta $fc            ; $df3c: 85 fc     

@@ -18,6 +18,21 @@ $077F#addr22#
 $0780#addr23#
 $07A8#addr24#
 $0722#addr25#
+$07B0#addr26#
+$07A2#addr27#
+$0750#addr28#
+$074E#addr29#
+$075F#addr30#
+$075B#addr32#
+$0752#addr33#
+$0751#addr34#
+$071A#addr35#
+$0725#addr36#
+$0728#addr37#
+$071B#addr38#
+$071C#addr39#
+$0760#addr3l#
+$071D#addr40#
 $4015#apu_status#
 $0770#apu_status_mirror#
 $4011#dmc_raw#
@@ -40,3 +55,5 @@ $0006#zp01#
 $0007#zp02#
 $0000#zp03#
 $0001#zp04#
+$0009#zp05#
+$0004#zp06#

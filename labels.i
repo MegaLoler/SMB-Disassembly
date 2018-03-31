@@ -19,6 +19,10 @@ joy1 = $4016
 
 ;; these are vars in ram
 
+; used to hold a return address?
+zp06 = $04
+zp07 = $05
+
 ; this is used as a 16-bit pair for storing an address
 zp01 = $06
 zp02 = $07
@@ -69,3 +73,28 @@ addr23 = $0780
 
 addr24 = $07a8
 addr25 = $0722
+
+; looks like it holds an array of some kind
+addr26 = $07b0
+
+addr27 = $07a2
+addr28 = $0750
+addr29 = $074e
+
+; has some index to smoe rom table
+addr30 = $075f
+; has some index offset to some other table
+addr3l = $0760
+
+addr32 = $075b
+addr33 = $0752
+addr34 = $0751
+addr36 = $0725
+addr37 = $0728
+
+; most sig i think
+addr35 = $071a
+addr38 = $071b
+; least sig
+addr39 = $071c
+addr40 = $071d
